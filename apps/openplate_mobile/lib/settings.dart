@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'pairing.dart';
+
 class OpenPlateSettings {
   const OpenPlateSettings({
     required this.recognitionUrl,
@@ -100,6 +102,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
         : 'Eine vollständige HTTPS-URL eingeben';
   }
 
+  Future<void> _scanPairingCode() async {
+    final pairing = await Navigator.of(context).push<OpenPlatePairing>(
+      MaterialPageRoute(builder: (_) => const PairingScannerScreen()),
+    );
+    if (pairing == null || !mounted) return;
+    setState(() {
+      _webhook.text = pairing.homeAssistantWebhookUrl;
+      _secret.text = pairing.webhookSecret;
+      _device.text = pairing.deviceId;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Home Assistant gekoppelt. Erkennungsserver ergänzen und speichern.',
+        ),
+      ),
+    );
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final settings = OpenPlateSettings(
@@ -134,6 +155,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            FilledButton.tonalIcon(
+              onPressed: _scanPairingCode,
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Home-Assistant-QR-Code scannen'),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Der QR-Code übernimmt Geräte-ID, Webhook und Signaturschlüssel. '
+              'Erkennungsserver und API-Key bleiben getrennt konfiguriert.',
+              textAlign: TextAlign.center,
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Divider(),
+            ),
             TextFormField(
               controller: _recognition,
               decoration: const InputDecoration(

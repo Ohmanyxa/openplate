@@ -10,16 +10,22 @@ Install `https://github.com/Ohmanyxa/openplate` as a HACS custom repository of c
 Home Assistant's `/config/custom_components/`. Restart Home Assistant, then add **OpenPlate** under
 **Settings → Devices & services**.
 
-Configure:
+During initial setup, configure:
 
-- Device ID: exactly the same value as in the iPhone app.
-- Signing secret: the 32+ character value generated/displayed by the iPhone app.
+- Device ID: a stable name for the mounted iPhone.
+- Home Assistant HTTPS URL: the base URL reachable from the iPhone.
 - Registered plates: one per line, for example `BAB123=Family car`.
 - Not-seen timeout: when the per-plate binary sensor returns to off.
 
-After setup, inspect the **Last plate** sensor attributes. `webhook_path` contains the generated path.
-Combine it with the externally valid HTTPS Home Assistant base URL and enter the resulting URL in the
-iPhone app. Example: `https://ha.example.test/api/webhook/<generated-id>`.
+OpenPlate then displays a ten-minute QR pairing code. In the iPhone app, open **Connection**, select
+**Scan Home Assistant QR code**, scan the code and save the remaining recognition-server settings.
+The QR code transfers the device ID, complete webhook URL and a generated HMAC signing key. It never
+leaves the local Home Assistant browser-to-iPhone camera path.
+
+To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
+contains dedicated screens for registered plates, iPhone pairing and the not-seen timeout. Starting a
+new pairing generates a new signing key; scan the code before confirming it because the previous app
+key stops working after confirmation.
 
 The integration creates:
 

@@ -40,6 +40,12 @@ In HACS, open **Custom repositories**, add `https://github.com/Ohmanyxa/openplat
 **Settings → Devices & services**. Releases are the supported installation source; the default branch
 is development code.
 
+After setup, open the OpenPlate integration and select **Configure**. Its management menu lets you
+add or rename registered plates, adjust the not-seen timeout and generate a time-limited QR pairing
+code. In the iPhone app, open **Connection** and scan that code; the device ID, webhook URL and a newly
+generated signing key are transferred locally. The recognition-server URL and API key remain separate
+and must be entered on the iPhone.
+
 Outputs default to `output/annotated.jpg` and `output/crops/`. The JSON written to stdout contains the
 recognized text, confidences, pixel bounding boxes and measured stage durations. Use `--help` for
 model, threshold and output options.

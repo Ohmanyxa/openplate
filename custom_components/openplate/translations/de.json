@@ -2,30 +2,78 @@
   "config": {
     "step": {
       "user": {
-        "title": "OpenPlate-Kamera",
-        "description": "Denselben Signaturschlüssel in die iPhone-App kopieren. Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename eingeben.",
+        "title": "OpenPlate einrichten",
+        "description": "Lege die Kamera und ihre bekannten Kennzeichen an. OpenPlate erzeugt den Signaturschlüssel automatisch.",
         "data": {
           "device_id": "Geräte-ID",
-          "secret": "Webhook-Signaturschlüssel",
+          "home_assistant_url": "Home-Assistant-HTTPS-URL",
           "plates": "Registrierte Kennzeichen",
           "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+        },
+        "data_description": {
+          "device_id": "Feste ID aus Buchstaben, Zahlen, Punkten, Unterstrichen oder Bindestrichen.",
+          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist.",
+          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename.",
+          "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
+      },
+      "pairing_qr": {
+        "title": "iPhone koppeln",
+        "description": "Öffne in der OpenPlate-App Verbindung, wähle Home-Assistant-QR-Code scannen und scanne diesen Code. Wähle danach Absenden. Der Code läuft nach 10 Minuten ab."
       }
     },
-    "error": {"secret_too_short": "Der Schlüssel muss mindestens 32 Zeichen enthalten"}
+    "error": {
+      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein.",
+      "invalid_device_id": "Verwende 1–64 Buchstaben, Zahlen, Punkte, Unterstriche oder Bindestriche."
+    },
+    "abort": {
+      "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."
+    }
   },
   "options": {
     "step": {
       "init": {
-        "title": "OpenPlate-Einstellungen",
-        "data": {
-          "device_id": "Geräte-ID",
-          "secret": "Webhook-Signaturschlüssel",
-          "plates": "Registrierte Kennzeichen",
-          "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+        "title": "OpenPlate verwalten",
+        "description": "Wähle aus, was du konfigurieren möchtest.",
+        "menu_options": {
+          "plates": "Kennzeichen verwalten",
+          "pairing": "iPhone koppeln",
+          "advanced": "Erweiterte Einstellungen"
+        }
+      },
+      "plates": {
+        "title": "Registrierte Kennzeichen",
+        "description": "Füge Kennzeichen hinzu, benenne sie um oder entferne sie. Änderungen werden nach dem Absenden übernommen.",
+        "data": {"plates": "Registrierte Kennzeichen"},
+        "data_description": {
+          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename. Leerzeichen und Bindestriche im Kennzeichen werden normalisiert."
+        }
+      },
+      "pairing": {
+        "title": "iPhone koppeln",
+        "description": "Beim Koppeln wird ein neuer Signaturschlüssel erzeugt. Die bisherige iPhone-Verbindung bleibt gültig, bis du die QR-Code-Seite bestätigst.",
+        "data": {"home_assistant_url": "Home-Assistant-HTTPS-URL"},
+        "data_description": {
+          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist."
+        }
+      },
+      "pairing_qr": {
+        "title": "Kopplungscode scannen",
+        "description": "Scanne zuerst diesen Code in der OpenPlate-iPhone-App. Wähle danach Absenden, um den neuen Schlüssel zu aktivieren. Der Code läuft nach 10 Minuten ab; der bisherige App-Schlüssel funktioniert anschließend nicht mehr."
+      },
+      "advanced": {
+        "title": "Erweiterte Einstellungen",
+        "data": {"absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"},
+        "data_description": {
+          "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
       }
     },
-    "error": {"secret_too_short": "Der Schlüssel muss mindestens 32 Zeichen enthalten"}
+    "error": {
+      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein."
+    },
+    "abort": {
+      "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."
+    }
   }
 }

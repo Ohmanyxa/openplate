@@ -1,9 +1,7 @@
 import importlib.util
 from pathlib import Path
 
-MODULE_PATH = (
-    Path(__file__).parents[1] / "custom_components/openplate/security.py"
-)
+MODULE_PATH = Path(__file__).parents[1] / "custom_components/openplate/security.py"
 SPEC = importlib.util.spec_from_file_location("openplate_ha_security", MODULE_PATH)
 assert SPEC and SPEC.loader
 security = importlib.util.module_from_spec(SPEC)
