@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
+import 'pairing.dart';
 import 'settings.dart';
 
 class ConfirmedPlate {
@@ -39,9 +40,30 @@ class PendingPlateEvent {
 }
 
 class OpenPlateApi {
-  OpenPlateApi(this.settings);
+  OpenPlateApi(this.settings, {http.Client? client}) : _client = client;
 
   final OpenPlateSettings settings;
+  final http.Client? _client;
+
+  Future<OpenPlateSettings> refreshConfiguration() async {
+    final body = jsonEncode({
+      'schema_version': 1,
+      'event_type': 'device.configuration',
+      'device_id': settings.deviceId,
+    });
+    final response = await _signedPost(body, const Uuid().v4());
+    if (response.statusCode != 200) {
+      throw HttpException('Home Assistant ${response.statusCode}');
+    }
+    final configuration = OpenPlatePairingConfiguration.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    if (configuration.deviceId != settings.deviceId) {
+      throw const FormatException('Unerwartete Geräte-ID');
+    }
+    return OpenPlateSettings.fromPairing(configuration);
+  }
+
   Future<List<ConfirmedPlate>> recognize(String imagePath) async {
     final request =
         http.MultipartRequest(
@@ -75,29 +97,31 @@ class OpenPlateApi {
       'confidence': plate.confidence,
       'observations': plate.observations,
     });
-    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-    final message = '$timestamp\n${event.eventId}\n$body';
-    final signature = Hmac(
-      sha256,
-      utf8.encode(settings.webhookSecret),
-    ).convert(utf8.encode(message)).toString();
-    final response = await http
-        .post(
-          Uri.parse(settings.homeAssistantWebhookUrl),
-          headers: {
-            HttpHeaders.contentTypeHeader: 'application/json',
-            'X-OpenPlate-Timestamp': '$timestamp',
-            'X-OpenPlate-Nonce': event.eventId,
-            'X-OpenPlate-Signature': signature,
-          },
-          body: body,
-        )
-        .timeout(const Duration(seconds: 10));
+    final response = await _signedPost(body, event.eventId);
     // 409 means Home Assistant already accepted this stable event ID but its
     // original response was lost. Treat that replay-safe retry as delivered.
     if ((response.statusCode < 200 || response.statusCode >= 300) &&
         response.statusCode != 409) {
       throw HttpException('Home Assistant ${response.statusCode}');
     }
+  }
+
+  Future<http.Response> _signedPost(String body, String nonce) async {
+    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final message = '$timestamp\n$nonce\n$body';
+    final signature = Hmac(
+      sha256,
+      utf8.encode(settings.webhookSecret),
+    ).convert(utf8.encode(message)).toString();
+    return await (_client?.post ?? http.post)(
+      Uri.parse(settings.homeAssistantWebhookUrl),
+      headers: {
+        HttpHeaders.contentTypeHeader: 'application/json',
+        'X-OpenPlate-Timestamp': '$timestamp',
+        'X-OpenPlate-Nonce': nonce,
+        'X-OpenPlate-Signature': signature,
+      },
+      body: body,
+    ).timeout(const Duration(seconds: 10));
   }
 }

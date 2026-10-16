@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up OpenPlate",
-        "description": "Create the camera and its registered plates. OpenPlate generates the signing key automatically.",
+        "description": "Only the Home Assistant HTTPS address reachable from your iPhone is needed. The QR code appears next. Device identity and keys are generated automatically. Configure plates and recognition afterwards.",
         "data": {
           "device_id": "Device ID",
           "home_assistant_url": "Home Assistant HTTPS URL",
@@ -45,6 +45,7 @@
         "menu_options": {
           "plates": "Manage registered plates",
           "pairing": "Pair an iPhone",
+          "recognition": "Configure recognition server",
           "advanced": "Advanced settings"
         }
       },
@@ -60,7 +61,7 @@
       },
       "pairing": {
         "title": "Pair an iPhone",
-        "description": "Enter the complete camera configuration once in Home Assistant. The iPhone receives it through a one-time encrypted HTTPS exchange.",
+        "description": "Enter the Home Assistant HTTPS address reachable from your iPhone. The QR code appears next; no other settings are needed for pairing.",
         "data": {
           "home_assistant_url": "Home Assistant HTTPS URL",
           "recognition_url": "Recognition server HTTPS URL",
@@ -72,6 +73,20 @@
           "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
           "recognition_api_key": "Transferred only during the one-time HTTPS exchange.",
           "capture_interval": "How often the mounted iPhone captures a frame."
+        }
+      },
+      "recognition": {
+        "title": "Configure recognition server",
+        "description": "This is separate from iPhone pairing. Configure a running OpenPlate recognition server here. While open, the paired app retrieves changes automatically within about 15 seconds. This integration does not start the server itself.",
+        "data": {
+          "recognition_url": "Recognition server HTTPS address",
+          "recognition_api_key": "Recognition server API key",
+          "capture_interval": "Capture interval (seconds)"
+        },
+        "data_description": {
+          "recognition_url": "Local OpenPlate server address with a TLS certificate trusted by the iPhone.",
+          "recognition_api_key": "API key configured on the recognition server.",
+          "capture_interval": "How often the iPhone sends a camera frame for recognition."
         }
       },
       "pairing_qr": {

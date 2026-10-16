@@ -40,12 +40,18 @@ In HACS, open **Custom repositories**, add `https://github.com/Ohmanyxa/openplat
 **Settings → Devices & services**. Releases are the supported installation source; the default branch
 is development code.
 
-After setup, open the OpenPlate integration and select **Configure**. Its management menu lets you
-add or rename registered plates, adjust the not-seen timeout and generate a time-limited QR pairing
-code. Enter the recognition-server HTTPS URL and API key once in Home Assistant. On the iPhone, tap
-**Pair iPhone with QR code** and scan; the complete configuration is saved automatically. Confirm the
-QR screen in Home Assistant to activate it. The QR contains only a random, single-use token valid for
-at most ten minutes. Settings and keys are retrieved over HTTPS; iPhone secrets are kept in Keychain.
+Adding OpenPlate opens the QR pairing code directly when Home Assistant knows its HTTPS address.
+Otherwise, only that address is requested. On the iPhone, tap **iPhone per QR-Code koppeln**, scan,
+then confirm the QR screen in Home Assistant. Device identity and keys are generated automatically;
+server settings and registered plates are not required for pairing.
+
+Under **Configure**, manage plates or select **Configure recognition server** to enter the local
+recognition server HTTPS URL and API key. While open, the paired app retrieves these settings
+automatically within about 15 seconds, without another scan. It shows a waiting state until recognition
+is configured. The integration does not install or start the recognition server itself.
+
+QR tokens are random, single-use and valid for at most ten minutes. Pairing and authenticated
+configuration refresh use HTTPS; iPhone secrets are kept in Keychain.
 
 Outputs default to `output/annotated.jpg` and `output/crops/`. The JSON written to stdout contains the
 recognized text, confidences, pixel bounding boxes and measured stage durations. Use `--help` for

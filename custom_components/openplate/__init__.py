@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
+from .configuration import mobile_configuration
 from .const import (
     CONF_ABSENCE_TIMEOUT,
     CONF_DEVICE_ID,
@@ -105,6 +106,16 @@ class OpenPlateManager:
         self._nonces[nonce] = now
         try:
             payload = json.loads(body)
+            if (
+                isinstance(payload, dict)
+                and payload.get("schema_version") == 1
+                and payload.get("event_type") == "device.configuration"
+                and payload.get("device_id") == self.config[CONF_DEVICE_ID]
+            ):
+                return web.json_response(
+                    {"schema_version": 1, **mobile_configuration(self.config)},
+                    headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+                )
             self._validate_payload(payload)
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             return web.json_response({"error": "invalid payload"}, status=400)

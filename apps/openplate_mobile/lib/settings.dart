@@ -37,12 +37,13 @@ class OpenPlateSettings {
     webhookSecret: configuration.webhookSecret,
   );
 
-  bool get isComplete =>
-      recognitionUrl.startsWith('https://') &&
+  bool get isPaired =>
       homeAssistantWebhookUrl.startsWith('https://') &&
       deviceId.isNotEmpty &&
-      apiKey.isNotEmpty &&
       webhookSecret.length >= 32;
+
+  bool get isComplete =>
+      isPaired && recognitionUrl.startsWith('https://') && apiKey.isNotEmpty;
 
   static Future<OpenPlateSettings> load() async {
     final preferences = await SharedPreferences.getInstance();

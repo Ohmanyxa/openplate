@@ -45,16 +45,62 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   OpenPlateSettings? _settings;
+  Timer? _configurationTimer;
+  bool _refreshing = false;
+  String? _configurationError;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _configurationTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _refreshConfiguration(),
+    );
   }
 
   Future<void> _load() async {
     final settings = await OpenPlateSettings.load();
     if (mounted) setState(() => _settings = settings);
+    await _refreshConfiguration();
+  }
+
+  Future<void> _refreshConfiguration() async {
+    final settings = _settings;
+    if (!mounted || settings == null || !settings.isPaired || _refreshing) {
+      return;
+    }
+    _refreshing = true;
+    try {
+      final updated = await OpenPlateApi(settings).refreshConfiguration();
+      if (!mounted || !identical(settings, _settings)) return;
+      if (updated.recognitionUrl != settings.recognitionUrl ||
+          updated.apiKey != settings.apiKey ||
+          updated.captureIntervalSeconds != settings.captureIntervalSeconds ||
+          updated.homeAssistantWebhookUrl != settings.homeAssistantWebhookUrl ||
+          updated.webhookSecret != settings.webhookSecret) {
+        await updated.save();
+        if (mounted && identical(settings, _settings)) {
+          setState(() => _settings = updated);
+        }
+      }
+      if (mounted) setState(() => _configurationError = null);
+    } on Object {
+      if (mounted) {
+        setState(
+          () => _configurationError =
+              'Home Assistant noch nicht erreichbar. Kopplung dort mit Absenden bestätigen.',
+        );
+      }
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _configurationTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _pair() async {
@@ -96,6 +142,19 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
             ),
             const Spacer(),
+            if (settings.isPaired) ...[
+              Text(
+                settings.isComplete
+                    ? 'Mit Home Assistant gekoppelt'
+                    : 'Mit Home Assistant gekoppelt. Erkennungsserver noch nicht eingerichtet. '
+                          'Die Einstellungen werden automatisch übernommen, sobald sie in '
+                          'Home Assistant hinterlegt sind.',
+                textAlign: TextAlign.center,
+              ),
+              if (_configurationError != null)
+                Text(_configurationError!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+            ],
             if (settings.isComplete)
               FilledButton.icon(
                 onPressed: widget.cameras.isEmpty
@@ -111,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Monitoring starten'),
               )
-            else
+            else if (!settings.isPaired)
               FilledButton.icon(
                 onPressed: _pair,
                 icon: const Icon(Icons.qr_code_scanner),
@@ -132,7 +191,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               icon: const Icon(Icons.settings),
               label: Text(
-                settings.isComplete
+                settings.isPaired
                     ? 'Verbindung verwalten'
                     : 'Manuell einrichten',
               ),

@@ -79,6 +79,42 @@ void main() {
     );
   });
 
+  test('pairs securely before a recognition server is configured', () {
+    final configuration = OpenPlatePairingConfiguration.fromJson({
+      'schema_version': 1,
+      'device_id': 'iphone_gate',
+      'home_assistant_webhook_url':
+          'https://ha.example.test/api/webhook/device-id',
+      'webhook_secret': 'x' * 32,
+      'capture_interval_seconds': 1,
+    });
+    expect(configuration.recognitionUrl, isEmpty);
+    expect(configuration.recognitionApiKey, isEmpty);
+  });
+
+  test(
+    'does not accept an incomplete or insecure recognition configuration',
+    () {
+      for (final url in [
+        'http://recognition.local',
+        'https://recognition.local',
+      ]) {
+        expect(
+          () => OpenPlatePairingConfiguration.fromJson({
+            'schema_version': 1,
+            'device_id': 'iphone_gate',
+            'recognition_url': url,
+            'home_assistant_webhook_url':
+                'https://ha.example.test/api/webhook/device-id',
+            'webhook_secret': 'x' * 32,
+            'capture_interval_seconds': 1,
+          }),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
   test('rejects non-HTTPS pairing endpoints', () {
     expect(
       () => OpenPlatePairingRequest.parse(

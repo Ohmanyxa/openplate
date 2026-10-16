@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import secrets
 from typing import Any
 
@@ -19,6 +18,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .configuration import mobile_configuration
 from .const import (
     CONF_ABSENCE_TIMEOUT,
     CONF_CAPTURE_INTERVAL,
@@ -38,7 +38,6 @@ from .const import (
 from .pairing import build_pairing_uri, normalize_https_base_url
 from .pairing_webhook import async_ensure_pairing_gateway
 
-_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _QR_FIELD = "qr_code"
 
 
@@ -54,28 +53,10 @@ def _setup_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     values = defaults or {}
     return vol.Schema(
         {
-            vol.Required(CONF_DEVICE_ID, default=values.get(CONF_DEVICE_ID, "iphone_gate")): str,
             vol.Required(
                 CONF_HOME_ASSISTANT_URL,
                 default=values.get(CONF_HOME_ASSISTANT_URL, ""),
             ): str,
-            vol.Required(
-                CONF_RECOGNITION_URL,
-                default=values.get(CONF_RECOGNITION_URL, ""),
-            ): str,
-            vol.Required(
-                CONF_RECOGNITION_API_KEY,
-                default=values.get(CONF_RECOGNITION_API_KEY, ""),
-            ): _password_selector(),
-            vol.Required(
-                CONF_CAPTURE_INTERVAL,
-                default=values.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
-            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
-            vol.Optional(CONF_PLATES, default=values.get(CONF_PLATES, "")): _plate_selector(),
-            vol.Required(
-                CONF_ABSENCE_TIMEOUT,
-                default=values.get(CONF_ABSENCE_TIMEOUT, DEFAULT_ABSENCE_TIMEOUT),
-            ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
         }
     )
 
@@ -94,26 +75,16 @@ def _qr_schema(pairing_uri: str) -> vol.Schema:
     )
 
 
-def _validate_device_id(value: str) -> bool:
-    return bool(_DEVICE_ID_PATTERN.fullmatch(value.strip()))
-
-
 def _default_home_assistant_url(
     flow: config_entries.ConfigFlow | config_entries.OptionsFlow,
 ) -> str:
-    return flow.hass.config.external_url or flow.hass.config.internal_url or ""
-
-
-def _mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
-    base_url = normalize_https_base_url(configuration[CONF_HOME_ASSISTANT_URL])
-    return {
-        "device_id": configuration[CONF_DEVICE_ID],
-        "recognition_url": configuration[CONF_RECOGNITION_URL],
-        "recognition_api_key": configuration[CONF_RECOGNITION_API_KEY],
-        "home_assistant_webhook_url": (f"{base_url}/api/webhook/{configuration[CONF_WEBHOOK_ID]}"),
-        "webhook_secret": configuration[CONF_SECRET],
-        "capture_interval_seconds": configuration[CONF_CAPTURE_INTERVAL],
-    }
+    for value in (flow.hass.config.internal_url, flow.hass.config.external_url):
+        if value:
+            try:
+                return normalize_https_base_url(value)
+            except ValueError:
+                continue
+    return ""
 
 
 def _create_pairing_uri(
@@ -122,7 +93,7 @@ def _create_pairing_uri(
 ) -> str:
     gateway = async_ensure_pairing_gateway(flow.hass)
     token, _expires_at = gateway.create_offer(
-        _mobile_configuration(configuration),
+        mobile_configuration(configuration),
         lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
     )
     return build_pairing_uri(
@@ -144,30 +115,29 @@ class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
+        if user_input is None:
+            known_url = _default_home_assistant_url(self)
+            if known_url:
+                user_input = {CONF_HOME_ASSISTANT_URL: known_url}
         if user_input is not None:
-            device_id = user_input[CONF_DEVICE_ID].strip()
-            if not _validate_device_id(device_id):
-                errors[CONF_DEVICE_ID] = "invalid_device_id"
             try:
                 home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
                 errors[CONF_HOME_ASSISTANT_URL] = "https_required"
-            try:
-                recognition_url = normalize_https_base_url(user_input[CONF_RECOGNITION_URL])
-            except ValueError:
-                errors[CONF_RECOGNITION_URL] = "https_required"
-            if not user_input[CONF_RECOGNITION_API_KEY].strip():
-                errors[CONF_RECOGNITION_API_KEY] = "api_key_required"
             if not errors:
+                device_id = f"iphone_{secrets.token_hex(6)}"
                 await self.async_set_unique_id(device_id)
                 self._abort_if_unique_id_configured()
                 secret = secrets.token_urlsafe(32)
                 webhook_id = secrets.token_urlsafe(24)
                 self._pending_data = {
-                    **user_input,
                     CONF_DEVICE_ID: device_id,
                     CONF_HOME_ASSISTANT_URL: home_assistant_url,
-                    CONF_RECOGNITION_URL: recognition_url,
+                    CONF_RECOGNITION_URL: "",
+                    CONF_RECOGNITION_API_KEY: "",
+                    CONF_CAPTURE_INTERVAL: DEFAULT_CAPTURE_INTERVAL,
+                    CONF_PLATES: "",
+                    CONF_ABSENCE_TIMEOUT: DEFAULT_ABSENCE_TIMEOUT,
                     CONF_SECRET: secret,
                     CONF_WEBHOOK_ID: webhook_id,
                 }
@@ -212,7 +182,9 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
         return {**self.config_entry.options, **updates}
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        return self.async_show_menu(step_id="init", menu_options=["plates", "pairing", "advanced"])
+        return self.async_show_menu(
+            step_id="init", menu_options=["pairing", "plates", "recognition", "advanced"]
+        )
 
     async def async_step_plates(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:
@@ -230,11 +202,36 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_pairing(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
+        default_url = self._current.get(CONF_HOME_ASSISTANT_URL) or _default_home_assistant_url(
+            self
+        )
+        if user_input is None and default_url:
+            user_input = {CONF_HOME_ASSISTANT_URL: default_url}
         if user_input is not None:
             try:
                 home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
                 errors[CONF_HOME_ASSISTANT_URL] = "https_required"
+            if not errors:
+                secret = secrets.token_urlsafe(32)
+                self._pending_options = self._updated_options(
+                    {
+                        CONF_HOME_ASSISTANT_URL: home_assistant_url,
+                        CONF_SECRET: secret,
+                    }
+                )
+                configuration = {**self._current, **self._pending_options}
+                self._pairing_uri = _create_pairing_uri(self, configuration)
+                return await self.async_step_pairing_qr()
+        return self.async_show_form(
+            step_id="pairing",
+            data_schema=_setup_schema(user_input or {CONF_HOME_ASSISTANT_URL: default_url}),
+            errors=errors,
+        )
+
+    async def async_step_recognition(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
             try:
                 recognition_url = normalize_https_base_url(user_input[CONF_RECOGNITION_URL])
             except ValueError:
@@ -242,38 +239,28 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
             if not user_input[CONF_RECOGNITION_API_KEY].strip():
                 errors[CONF_RECOGNITION_API_KEY] = "api_key_required"
             if not errors:
-                secret = secrets.token_urlsafe(32)
-                self._pending_options = self._updated_options(
-                    {
-                        CONF_HOME_ASSISTANT_URL: home_assistant_url,
-                        CONF_RECOGNITION_URL: recognition_url,
-                        CONF_RECOGNITION_API_KEY: user_input[CONF_RECOGNITION_API_KEY],
-                        CONF_CAPTURE_INTERVAL: user_input[CONF_CAPTURE_INTERVAL],
-                        CONF_SECRET: secret,
-                    }
+                return self.async_create_entry(
+                    title="",
+                    data=self._updated_options(
+                        {**user_input, CONF_RECOGNITION_URL: recognition_url}
+                    ),
                 )
-                configuration = {**self._current, **self._pending_options}
-                self._pairing_uri = _create_pairing_uri(self, configuration)
-                return await self.async_step_pairing_qr()
-        default_url = self._current.get(CONF_HOME_ASSISTANT_URL, "")
-        if not default_url:
-            default_url = _default_home_assistant_url(self)
+        defaults = {**self._current, **(user_input or {})}
         return self.async_show_form(
-            step_id="pairing",
+            step_id="recognition",
             data_schema=vol.Schema(
                 {
-                    vol.Required(CONF_HOME_ASSISTANT_URL, default=default_url): str,
                     vol.Required(
                         CONF_RECOGNITION_URL,
-                        default=self._current.get(CONF_RECOGNITION_URL, ""),
+                        default=defaults.get(CONF_RECOGNITION_URL, ""),
                     ): str,
                     vol.Required(
                         CONF_RECOGNITION_API_KEY,
-                        default=self._current.get(CONF_RECOGNITION_API_KEY, ""),
+                        default=defaults.get(CONF_RECOGNITION_API_KEY, ""),
                     ): _password_selector(),
                     vol.Required(
                         CONF_CAPTURE_INTERVAL,
-                        default=self._current.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
+                        default=defaults.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
                     ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
                 }
             ),

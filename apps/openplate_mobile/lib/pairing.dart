@@ -111,13 +111,14 @@ class OpenPlatePairingConfiguration {
     final interval = json['capture_interval_seconds'];
     if (json['schema_version'] != 1 ||
         recognitionUrl == null ||
-        recognitionUrl.scheme != 'https' ||
-        recognitionUrl.host.isEmpty ||
+        !((recognitionUrl.toString().isEmpty && apiKey.isEmpty) ||
+            (recognitionUrl.scheme == 'https' &&
+                recognitionUrl.host.isNotEmpty &&
+                apiKey.isNotEmpty)) ||
         webhookUrl == null ||
         webhookUrl.scheme != 'https' ||
         webhookUrl.host.isEmpty ||
         deviceId.isEmpty ||
-        apiKey.isEmpty ||
         secret.length < 32 ||
         interval is! int ||
         interval < 1 ||

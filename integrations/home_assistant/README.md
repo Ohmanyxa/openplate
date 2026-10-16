@@ -10,18 +10,17 @@ Install `https://github.com/Ohmanyxa/openplate` as a HACS custom repository of c
 Home Assistant's `/config/custom_components/`. Restart Home Assistant, then add **OpenPlate** under
 **Settings → Devices & services**.
 
-During initial setup, configure:
+Initial setup displays the QR immediately if Home Assistant has a configured HTTPS URL. Otherwise,
+enter only the Home Assistant HTTPS base URL reachable from the iPhone. Device identity and keys are
+generated automatically. In the iPhone app, tap the pairing button and scan the code, then confirm
+the QR screen in Home Assistant. No recognition server settings or registered plates are needed to pair.
 
-- Device ID: a stable name for the mounted iPhone.
-- Home Assistant HTTPS URL: the base URL reachable from the iPhone.
-- Recognition server HTTPS URL and the API key configured on that server.
-- Capture interval: how often the iPhone sends a frame for recognition.
-- Registered plates: one per line, for example `BAB123=Family car`.
-- Not-seen timeout: when the per-plate binary sensor returns to off.
-
-OpenPlate then displays a ten-minute QR pairing code. In the iPhone app, tap the pairing button and
-scan the code. The app retrieves and saves the complete configuration automatically through HTTPS.
-Confirm the QR screen in Home Assistant to activate the connection.
+After pairing, select **Configure → Configure recognition server** to enter the running recognition
+server HTTPS URL, its API key and the capture interval. The integration does not start this server itself.
+The open app retrieves settings automatically within about 15 seconds using signed HTTPS requests;
+another QR scan is unnecessary. Until then, it shows that it is paired but waiting for recognition setup.
+Configure registered plates separately, one per line as `BAB123=Family car`. Adjust the not-seen timeout
+under advanced settings.
 
 The QR contains a random 256-bit one-time token, the HTTPS pairing endpoint and an expiry time.
 It contains no permanent credentials. Home Assistant consumes the token on its first successful
@@ -31,7 +30,7 @@ stores configuration in its normal configuration-entry storage; protect the host
 Both HTTPS certificates must be trusted by the iPhone, including when using a local certificate authority.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
-contains dedicated screens for registered plates, iPhone pairing and the not-seen timeout. Starting a
+contains dedicated screens for registered plates, recognition, iPhone pairing and the not-seen timeout. Starting a
 new pairing generates a new signing key; scan the code before confirming it because the previous app
 key stops working after confirmation.
 
