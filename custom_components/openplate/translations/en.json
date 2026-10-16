@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OpenPlate camera",
+        "description": "Copy the same signing secret into the iPhone app. Enter one plate per line as PLATE=Display name.",
+        "data": {
+          "device_id": "Device ID",
+          "secret": "Webhook signing secret",
+          "plates": "Registered plates",
+          "absence_timeout": "Not-seen timeout (seconds)"
+        }
+      }
+    },
+    "error": {"secret_too_short": "The secret must contain at least 32 characters"}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OpenPlate settings",
+        "data": {
+          "device_id": "Device ID",
+          "secret": "Webhook signing secret",
+          "plates": "Registered plates",
+          "absence_timeout": "Not-seen timeout (seconds)"
+        }
+      }
+    },
+    "error": {"secret_too_short": "The secret must contain at least 32 characters"}
+  }
+}

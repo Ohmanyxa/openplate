@@ -1,0 +1,31 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OpenPlate-Kamera",
+        "description": "Denselben Signaturschlüssel in die iPhone-App kopieren. Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename eingeben.",
+        "data": {
+          "device_id": "Geräte-ID",
+          "secret": "Webhook-Signaturschlüssel",
+          "plates": "Registrierte Kennzeichen",
+          "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+        }
+      }
+    },
+    "error": {"secret_too_short": "Der Schlüssel muss mindestens 32 Zeichen enthalten"}
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "OpenPlate-Einstellungen",
+        "data": {
+          "device_id": "Geräte-ID",
+          "secret": "Webhook-Signaturschlüssel",
+          "plates": "Registrierte Kennzeichen",
+          "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+        }
+      }
+    },
+    "error": {"secret_too_short": "Der Schlüssel muss mindestens 32 Zeichen enthalten"}
+  }
+}
