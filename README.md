@@ -42,9 +42,10 @@ is development code.
 
 After setup, open the OpenPlate integration and select **Configure**. Its management menu lets you
 add or rename registered plates, adjust the not-seen timeout and generate a time-limited QR pairing
-code. In the iPhone app, open **Connection** and scan that code; the device ID, webhook URL and a newly
-generated signing key are transferred locally. The recognition-server URL and API key remain separate
-and must be entered on the iPhone.
+code. Enter the recognition-server HTTPS URL and API key once in Home Assistant. On the iPhone, tap
+**Pair iPhone with QR code** and scan; the complete configuration is saved automatically. Confirm the
+QR screen in Home Assistant to activate it. The QR contains only a random, single-use token valid for
+at most ten minutes. Settings and keys are retrieved over HTTPS; iPhone secrets are kept in Keychain.
 
 Outputs default to `output/annotated.jpg` and `output/crops/`. The JSON written to stdout contains the
 recognized text, confidences, pixel bounding boxes and measured stage durations. Use `--help` for

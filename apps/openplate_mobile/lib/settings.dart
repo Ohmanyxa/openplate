@@ -26,6 +26,17 @@ class OpenPlateSettings {
   final String apiKey;
   final String webhookSecret;
 
+  factory OpenPlateSettings.fromPairing(
+    OpenPlatePairingConfiguration configuration,
+  ) => OpenPlateSettings(
+    recognitionUrl: configuration.recognitionUrl,
+    homeAssistantWebhookUrl: configuration.homeAssistantWebhookUrl,
+    deviceId: configuration.deviceId,
+    captureIntervalSeconds: configuration.captureIntervalSeconds,
+    apiKey: configuration.recognitionApiKey,
+    webhookSecret: configuration.webhookSecret,
+  );
+
   bool get isComplete =>
       recognitionUrl.startsWith('https://') &&
       homeAssistantWebhookUrl.startsWith('https://') &&
@@ -103,22 +114,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _scanPairingCode() async {
-    final pairing = await Navigator.of(context).push<OpenPlatePairing>(
-      MaterialPageRoute(builder: (_) => const PairingScannerScreen()),
-    );
-    if (pairing == null || !mounted) return;
-    setState(() {
-      _webhook.text = pairing.homeAssistantWebhookUrl;
-      _secret.text = pairing.webhookSecret;
-      _device.text = pairing.deviceId;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Home Assistant gekoppelt. Erkennungsserver ergänzen und speichern.',
-        ),
-      ),
-    );
+    final configuration = await Navigator.of(context)
+        .push<OpenPlatePairingConfiguration>(
+          MaterialPageRoute(builder: (_) => const PairingScannerScreen()),
+        );
+    if (configuration == null || !mounted) return;
+    final settings = OpenPlateSettings.fromPairing(configuration);
+    await settings.save();
+    if (mounted) Navigator.of(context).pop(settings);
   }
 
   Future<void> _save() async {
@@ -162,8 +165,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Der QR-Code übernimmt Geräte-ID, Webhook und Signaturschlüssel. '
-              'Erkennungsserver und API-Key bleiben getrennt konfiguriert.',
+              'Ein Scan übernimmt die vollständige Konfiguration verschlüsselt '
+              'von Home Assistant und speichert die Schlüssel im iOS-Schlüsselbund.',
               textAlign: TextAlign.center,
             ),
             const Padding(

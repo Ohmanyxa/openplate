@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'openplate_api.dart';
+import 'pairing.dart';
 import 'settings.dart';
 
 Future<void> main() async {
@@ -56,6 +57,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _settings = settings);
   }
 
+  Future<void> _pair() async {
+    final configuration = await Navigator.of(context)
+        .push<OpenPlatePairingConfiguration>(
+          MaterialPageRoute(builder: (_) => const PairingScannerScreen()),
+        );
+    if (configuration == null || !mounted) return;
+    final settings = OpenPlateSettings.fromPairing(configuration);
+    await settings.save();
+    if (mounted) setState(() => _settings = settings);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = _settings;
@@ -84,20 +96,27 @@ class _HomeScreenState extends State<HomeScreen> {
               textAlign: TextAlign.center,
             ),
             const Spacer(),
-            FilledButton.icon(
-              onPressed: widget.cameras.isEmpty || !settings.isComplete
-                  ? null
-                  : () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => MonitorScreen(
-                          cameras: widget.cameras,
-                          settings: settings,
+            if (settings.isComplete)
+              FilledButton.icon(
+                onPressed: widget.cameras.isEmpty
+                    ? null
+                    : () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => MonitorScreen(
+                            cameras: widget.cameras,
+                            settings: settings,
+                          ),
                         ),
                       ),
-                    ),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Monitoring starten'),
-            ),
+                icon: const Icon(Icons.play_arrow),
+                label: const Text('Monitoring starten'),
+              )
+            else
+              FilledButton.icon(
+                onPressed: _pair,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('iPhone per QR-Code koppeln'),
+              ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: () async {
@@ -112,7 +131,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 }
               },
               icon: const Icon(Icons.settings),
-              label: const Text('Verbindung einrichten'),
+              label: Text(
+                settings.isComplete
+                    ? 'Verbindung verwalten'
+                    : 'Manuell einrichten',
+              ),
             ),
           ],
         ),

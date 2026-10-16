@@ -1,72 +1,92 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:openplate_mobile/pairing.dart';
 
 void main() {
-  const secret = '12345678901234567890123456789012';
+  const token = '12345678901234567890123456789012';
   final now = DateTime.fromMillisecondsSinceEpoch(
     1700000000 * 1000,
     isUtc: true,
   );
 
-  test('parses a valid versioned pairing URI', () {
-    final uri = Uri(
-      scheme: 'openplate',
-      host: 'pair',
-      queryParameters: {
-        'version': '1',
-        'device_id': 'iphone_gate',
-        'home_assistant_webhook_url':
-            'https://ha.example.test/api/webhook/webhook-id',
-        'webhook_secret': secret,
-        'expires_at': '1700000600',
-      },
+  Uri pairingUri({
+    String pairingUrl = 'https://ha.example.test/api/webhook/openplate_pairing',
+    String expiresAt = '1700000600',
+  }) => Uri(
+    scheme: 'openplate',
+    host: 'pair',
+    queryParameters: {
+      'version': '1',
+      'pairing_url': pairingUrl,
+      'token': token,
+      'expires_at': expiresAt,
+    },
+  );
+
+  test('parses a valid one-time pairing URI', () {
+    final pairing = OpenPlatePairingRequest.parse(
+      pairingUri().toString(),
+      now: now,
     );
 
-    final pairing = OpenPlatePairing.parse(uri.toString(), now: now);
-
-    expect(pairing.deviceId, 'iphone_gate');
     expect(
-      pairing.homeAssistantWebhookUrl,
-      'https://ha.example.test/api/webhook/webhook-id',
+      pairing.pairingUrl.toString(),
+      'https://ha.example.test/api/webhook/openplate_pairing',
     );
-    expect(pairing.webhookSecret, secret);
+    expect(pairing.token, token);
+  });
+
+  test('exchanges token for complete HTTPS configuration', () async {
+    final pairing = OpenPlatePairingRequest.parse(
+      pairingUri().toString(),
+      now: now,
+    );
+    final client = MockClient((request) async {
+      expect(request.method, 'POST');
+      expect(jsonDecode(request.body), {'token': token});
+      return http.Response(
+        jsonEncode({
+          'schema_version': 1,
+          'device_id': 'iphone_gate',
+          'recognition_url': 'https://recognition.example.test',
+          'recognition_api_key': 'server-key',
+          'home_assistant_webhook_url':
+              'https://ha.example.test/api/webhook/device-id',
+          'webhook_secret': 'x' * 32,
+          'capture_interval_seconds': 2,
+        }),
+        200,
+      );
+    });
+
+    final configuration = await pairing.exchange(client: client);
+
+    expect(configuration.deviceId, 'iphone_gate');
+    expect(configuration.recognitionApiKey, 'server-key');
+    expect(configuration.captureIntervalSeconds, 2);
   });
 
   test('rejects expired pairing codes', () {
-    final uri = Uri(
-      scheme: 'openplate',
-      host: 'pair',
-      queryParameters: {
-        'version': '1',
-        'device_id': 'iphone_gate',
-        'home_assistant_webhook_url':
-            'https://ha.example.test/api/webhook/webhook-id',
-        'webhook_secret': secret,
-        'expires_at': '1699999999',
-      },
-    );
-
     expect(
-      () => OpenPlatePairing.parse(uri.toString(), now: now),
+      () => OpenPlatePairingRequest.parse(
+        pairingUri(expiresAt: '1699999999').toString(),
+        now: now,
+      ),
       throwsFormatException,
     );
   });
 
-  test('rejects non-HTTPS webhooks', () {
-    final uri = Uri(
-      scheme: 'openplate',
-      host: 'pair',
-      queryParameters: {
-        'version': '1',
-        'device_id': 'iphone_gate',
-        'home_assistant_webhook_url': 'http://ha.local/api/webhook/webhook-id',
-        'webhook_secret': secret,
-        'expires_at': '1700000600',
-      },
-    );
-
+  test('rejects non-HTTPS pairing endpoints', () {
     expect(
-      () => OpenPlatePairing.parse(uri.toString(), now: now),
+      () => OpenPlatePairingRequest.parse(
+        pairingUri(
+          pairingUrl: 'http://ha.local/api/webhook/openplate_pairing',
+        ).toString(),
+        now: now,
+      ),
       throwsFormatException,
     );
   });

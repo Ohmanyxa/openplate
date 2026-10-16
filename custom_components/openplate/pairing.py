@@ -17,27 +17,25 @@ def normalize_https_base_url(value: str) -> str:
 def build_pairing_uri(
     *,
     home_assistant_url: str,
-    webhook_id: str,
-    device_id: str,
-    secret: str,
+    pairing_webhook_id: str,
+    token: str,
     issued_at: datetime | None = None,
     lifetime_seconds: int = 600,
 ) -> str:
-    """Return a versioned, expiring OpenPlate pairing URI."""
+    """Return a versioned URI containing only a short-lived bearer token."""
     base_url = normalize_https_base_url(home_assistant_url)
-    if not device_id.strip() or not webhook_id.strip() or len(secret) < 32:
+    if not pairing_webhook_id.strip() or len(token) < 32:
         raise ValueError("Incomplete pairing data")
     created = issued_at or datetime.now(timezone.utc)
     if created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
     expires_at = int((created + timedelta(seconds=lifetime_seconds)).timestamp())
-    webhook_url = f"{base_url}/api/webhook/{webhook_id}"
+    pairing_url = f"{base_url}/api/webhook/{pairing_webhook_id}"
     query = urlencode(
         {
             "version": "1",
-            "device_id": device_id.strip(),
-            "home_assistant_webhook_url": webhook_url,
-            "webhook_secret": secret,
+            "pairing_url": pairing_url,
+            "token": token,
             "expires_at": str(expires_at),
         }
     )

@@ -14,13 +14,21 @@ During initial setup, configure:
 
 - Device ID: a stable name for the mounted iPhone.
 - Home Assistant HTTPS URL: the base URL reachable from the iPhone.
+- Recognition server HTTPS URL and the API key configured on that server.
+- Capture interval: how often the iPhone sends a frame for recognition.
 - Registered plates: one per line, for example `BAB123=Family car`.
 - Not-seen timeout: when the per-plate binary sensor returns to off.
 
-OpenPlate then displays a ten-minute QR pairing code. In the iPhone app, open **Connection**, select
-**Scan Home Assistant QR code**, scan the code and save the remaining recognition-server settings.
-The QR code transfers the device ID, complete webhook URL and a generated HMAC signing key. It never
-leaves the local Home Assistant browser-to-iPhone camera path.
+OpenPlate then displays a ten-minute QR pairing code. In the iPhone app, tap the pairing button and
+scan the code. The app retrieves and saves the complete configuration automatically through HTTPS.
+Confirm the QR screen in Home Assistant to activate the connection.
+
+The QR contains a random 256-bit one-time token, the HTTPS pairing endpoint and an expiry time.
+It contains no permanent credentials. Home Assistant consumes the token on its first successful
+exchange and sends the configuration with cache prevention headers. Treat the QR as sensitive while
+it is valid. The iPhone stores the recognition API key and signing key in iOS Keychain. Home Assistant
+stores configuration in its normal configuration-entry storage; protect the host and its backups.
+Both HTTPS certificates must be trusted by the iPhone, including when using a local certificate authority.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
 contains dedicated screens for registered plates, iPhone pairing and the not-seen timeout. Starting a
@@ -70,3 +78,12 @@ protection. Directional line crossing is planned but not present in this increme
 The app sends JSON through HTTPS and signs the exact request with HMAC-SHA256. Home Assistant rejects
 old timestamps, modified bodies and reused nonces. TLS must terminate at Home Assistant or a trusted
 local reverse proxy; plain HTTP is intentionally rejected by the app configuration.
+
+## Pairing regression tests
+
+These tests exercise the one-time gateway and form selectors against Home Assistant 2026.10.1:
+
+```bash
+PYTHONPATH=. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+  python -m unittest discover -s integrations/home_assistant/tests -v
+```

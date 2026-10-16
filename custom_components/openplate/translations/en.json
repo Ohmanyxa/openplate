@@ -7,24 +7,31 @@
         "data": {
           "device_id": "Device ID",
           "home_assistant_url": "Home Assistant HTTPS URL",
+          "recognition_url": "Recognition server HTTPS URL",
+          "recognition_api_key": "Recognition server API key",
+          "capture_interval": "Capture interval (seconds)",
           "plates": "Registered plates",
           "absence_timeout": "Not-seen timeout (seconds)"
         },
         "data_description": {
           "device_id": "Stable identifier using letters, numbers, dots, underscores or hyphens.",
           "home_assistant_url": "HTTPS base URL reachable from the mounted iPhone.",
+          "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
+          "recognition_api_key": "API key configured on the recognition server. It is transferred only through the one-time HTTPS pairing exchange.",
+          "capture_interval": "How often the mounted iPhone captures a frame.",
           "plates": "One plate per line as PLATE=Display name.",
           "absence_timeout": "How long a registered plate remains recently seen."
         }
       },
       "pairing_qr": {
         "title": "Pair the iPhone",
-        "description": "In the OpenPlate app, open Connection, select Scan Home Assistant QR code and scan this code. Then select Submit. The code expires after 10 minutes."
+        "description": "Scan this code with the OpenPlate app. The code contains only a random one-time token; all settings and keys are transferred over HTTPS and the token is immediately invalidated. Then select Submit to activate the connection."
       }
     },
     "error": {
       "https_required": "Enter a complete HTTPS base URL without query parameters.",
-      "invalid_device_id": "Use 1–64 letters, numbers, dots, underscores or hyphens."
+      "invalid_device_id": "Use 1–64 letters, numbers, dots, underscores or hyphens.",
+      "api_key_required": "Enter the recognition server API key."
     },
     "abort": {
       "pairing_expired": "The pairing process is no longer available. Start it again."
@@ -51,15 +58,23 @@
       },
       "pairing": {
         "title": "Pair an iPhone",
-        "description": "Pairing generates a new signing key. The previous iPhone connection remains valid until you confirm the QR-code screen.",
-        "data": {"home_assistant_url": "Home Assistant HTTPS URL"},
+        "description": "Enter the complete camera configuration once in Home Assistant. The iPhone receives it through a one-time encrypted HTTPS exchange.",
+        "data": {
+          "home_assistant_url": "Home Assistant HTTPS URL",
+          "recognition_url": "Recognition server HTTPS URL",
+          "recognition_api_key": "Recognition server API key",
+          "capture_interval": "Capture interval (seconds)"
+        },
         "data_description": {
-          "home_assistant_url": "HTTPS base URL reachable from the mounted iPhone."
+          "home_assistant_url": "HTTPS base URL reachable from the mounted iPhone.",
+          "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
+          "recognition_api_key": "Transferred only during the one-time HTTPS exchange.",
+          "capture_interval": "How often the mounted iPhone captures a frame."
         }
       },
       "pairing_qr": {
         "title": "Scan the pairing code",
-        "description": "Scan this code in the OpenPlate iPhone app first. Then select Submit to activate the new key. The code expires after 10 minutes and the previous app key will stop working."
+        "description": "Scan this code in the OpenPlate app. It contains no permanent secret, only a random token that is valid for one HTTPS exchange and at most 10 minutes. Then select Submit to activate the new configuration."
       },
       "advanced": {
         "title": "Advanced settings",
@@ -70,7 +85,8 @@
       }
     },
     "error": {
-      "https_required": "Enter a complete HTTPS base URL without query parameters."
+      "https_required": "Enter a complete HTTPS base URL without query parameters.",
+      "api_key_required": "Enter the recognition server API key."
     },
     "abort": {
       "pairing_expired": "The pairing process is no longer available. Start it again."

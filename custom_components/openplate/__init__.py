@@ -15,6 +15,7 @@ from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.typing import ConfigType
 
 from .const import (
     CONF_ABSENCE_TIMEOUT,
@@ -27,6 +28,7 @@ from .const import (
     PLATFORMS,
     SIGNATURE_MAX_AGE_SECONDS,
 )
+from .pairing_webhook import async_ensure_pairing_gateway
 from .security import valid_signature
 
 _NOT_ALNUM = re.compile(r"[^A-Z0-9]")
@@ -165,6 +167,12 @@ class OpenPlateManager:
         self._nonces = {nonce: seen for nonce, seen in self._nonces.items() if seen >= cutoff}
 
 
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+    """Set up the one-time pairing endpoint before the first config entry exists."""
+    async_ensure_pairing_gateway(hass)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     manager = OpenPlateManager(hass, entry)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager
@@ -186,8 +194,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate entries created before the guided pairing flow."""
-    if entry.version == 1:
-        hass.config_entries.async_update_entry(entry, version=2)
+    if entry.version < 3:
+        hass.config_entries.async_update_entry(entry, version=3)
     return True
 
 

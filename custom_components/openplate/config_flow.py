@@ -16,20 +16,27 @@ from homeassistant.helpers.selector import (
     QrErrorCorrectionLevel,
     TextSelector,
     TextSelectorConfig,
+    TextSelectorType,
 )
 
 from .const import (
     CONF_ABSENCE_TIMEOUT,
+    CONF_CAPTURE_INTERVAL,
     CONF_DEVICE_ID,
     CONF_HOME_ASSISTANT_URL,
     CONF_PLATES,
+    CONF_RECOGNITION_API_KEY,
+    CONF_RECOGNITION_URL,
     CONF_SECRET,
     CONF_WEBHOOK_ID,
     DEFAULT_ABSENCE_TIMEOUT,
+    DEFAULT_CAPTURE_INTERVAL,
     DOMAIN,
     PAIRING_CODE_LIFETIME_SECONDS,
+    PAIRING_WEBHOOK_ID,
 )
 from .pairing import build_pairing_uri, normalize_https_base_url
+from .pairing_webhook import async_ensure_pairing_gateway
 
 _DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 _QR_FIELD = "qr_code"
@@ -37,6 +44,10 @@ _QR_FIELD = "qr_code"
 
 def _plate_selector() -> TextSelector:
     return TextSelector(TextSelectorConfig(multiline=True))
+
+
+def _password_selector() -> TextSelector:
+    return TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 def _setup_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -48,6 +59,18 @@ def _setup_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_HOME_ASSISTANT_URL,
                 default=values.get(CONF_HOME_ASSISTANT_URL, ""),
             ): str,
+            vol.Required(
+                CONF_RECOGNITION_URL,
+                default=values.get(CONF_RECOGNITION_URL, ""),
+            ): str,
+            vol.Required(
+                CONF_RECOGNITION_API_KEY,
+                default=values.get(CONF_RECOGNITION_API_KEY, ""),
+            ): _password_selector(),
+            vol.Required(
+                CONF_CAPTURE_INTERVAL,
+                default=values.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
             vol.Optional(CONF_PLATES, default=values.get(CONF_PLATES, "")): _plate_selector(),
             vol.Required(
                 CONF_ABSENCE_TIMEOUT,
@@ -81,10 +104,39 @@ def _default_home_assistant_url(
     return flow.hass.config.external_url or flow.hass.config.internal_url or ""
 
 
+def _mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
+    base_url = normalize_https_base_url(configuration[CONF_HOME_ASSISTANT_URL])
+    return {
+        "device_id": configuration[CONF_DEVICE_ID],
+        "recognition_url": configuration[CONF_RECOGNITION_URL],
+        "recognition_api_key": configuration[CONF_RECOGNITION_API_KEY],
+        "home_assistant_webhook_url": (f"{base_url}/api/webhook/{configuration[CONF_WEBHOOK_ID]}"),
+        "webhook_secret": configuration[CONF_SECRET],
+        "capture_interval_seconds": configuration[CONF_CAPTURE_INTERVAL],
+    }
+
+
+def _create_pairing_uri(
+    flow: config_entries.ConfigFlow | config_entries.OptionsFlow,
+    configuration: dict[str, Any],
+) -> str:
+    gateway = async_ensure_pairing_gateway(flow.hass)
+    token, _expires_at = gateway.create_offer(
+        _mobile_configuration(configuration),
+        lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
+    )
+    return build_pairing_uri(
+        home_assistant_url=configuration[CONF_HOME_ASSISTANT_URL],
+        pairing_webhook_id=PAIRING_WEBHOOK_ID,
+        token=token,
+        lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
+    )
+
+
 class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure one mounted OpenPlate camera."""
 
-    VERSION = 2
+    VERSION = 3
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None
@@ -100,6 +152,12 @@ class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
                 errors[CONF_HOME_ASSISTANT_URL] = "https_required"
+            try:
+                recognition_url = normalize_https_base_url(user_input[CONF_RECOGNITION_URL])
+            except ValueError:
+                errors[CONF_RECOGNITION_URL] = "https_required"
+            if not user_input[CONF_RECOGNITION_API_KEY].strip():
+                errors[CONF_RECOGNITION_API_KEY] = "api_key_required"
             if not errors:
                 await self.async_set_unique_id(device_id)
                 self._abort_if_unique_id_configured()
@@ -109,16 +167,11 @@ class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     **user_input,
                     CONF_DEVICE_ID: device_id,
                     CONF_HOME_ASSISTANT_URL: home_assistant_url,
+                    CONF_RECOGNITION_URL: recognition_url,
                     CONF_SECRET: secret,
                     CONF_WEBHOOK_ID: webhook_id,
                 }
-                self._pairing_uri = build_pairing_uri(
-                    home_assistant_url=home_assistant_url,
-                    webhook_id=webhook_id,
-                    device_id=device_id,
-                    secret=secret,
-                    lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
-                )
+                self._pairing_uri = _create_pairing_uri(self, self._pending_data)
                 return await self.async_step_pairing_qr()
 
         defaults = dict(user_input or {})
@@ -182,21 +235,25 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
                 home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
                 errors[CONF_HOME_ASSISTANT_URL] = "https_required"
+            try:
+                recognition_url = normalize_https_base_url(user_input[CONF_RECOGNITION_URL])
+            except ValueError:
+                errors[CONF_RECOGNITION_URL] = "https_required"
+            if not user_input[CONF_RECOGNITION_API_KEY].strip():
+                errors[CONF_RECOGNITION_API_KEY] = "api_key_required"
             if not errors:
                 secret = secrets.token_urlsafe(32)
                 self._pending_options = self._updated_options(
                     {
                         CONF_HOME_ASSISTANT_URL: home_assistant_url,
+                        CONF_RECOGNITION_URL: recognition_url,
+                        CONF_RECOGNITION_API_KEY: user_input[CONF_RECOGNITION_API_KEY],
+                        CONF_CAPTURE_INTERVAL: user_input[CONF_CAPTURE_INTERVAL],
                         CONF_SECRET: secret,
                     }
                 )
-                self._pairing_uri = build_pairing_uri(
-                    home_assistant_url=home_assistant_url,
-                    webhook_id=self.config_entry.data[CONF_WEBHOOK_ID],
-                    device_id=self._current[CONF_DEVICE_ID],
-                    secret=secret,
-                    lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
-                )
+                configuration = {**self._current, **self._pending_options}
+                self._pairing_uri = _create_pairing_uri(self, configuration)
                 return await self.async_step_pairing_qr()
         default_url = self._current.get(CONF_HOME_ASSISTANT_URL, "")
         if not default_url:
@@ -204,7 +261,21 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="pairing",
             data_schema=vol.Schema(
-                {vol.Required(CONF_HOME_ASSISTANT_URL, default=default_url): str}
+                {
+                    vol.Required(CONF_HOME_ASSISTANT_URL, default=default_url): str,
+                    vol.Required(
+                        CONF_RECOGNITION_URL,
+                        default=self._current.get(CONF_RECOGNITION_URL, ""),
+                    ): str,
+                    vol.Required(
+                        CONF_RECOGNITION_API_KEY,
+                        default=self._current.get(CONF_RECOGNITION_API_KEY, ""),
+                    ): _password_selector(),
+                    vol.Required(
+                        CONF_CAPTURE_INTERVAL,
+                        default=self._current.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
+                    ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+                }
             ),
             errors=errors,
         )

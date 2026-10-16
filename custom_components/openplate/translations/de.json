@@ -7,24 +7,31 @@
         "data": {
           "device_id": "Geräte-ID",
           "home_assistant_url": "Home-Assistant-HTTPS-URL",
+          "recognition_url": "HTTPS-URL des Erkennungsservers",
+          "recognition_api_key": "API-Key des Erkennungsservers",
+          "capture_interval": "Aufnahmeintervall (Sekunden)",
           "plates": "Registrierte Kennzeichen",
           "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
         },
         "data_description": {
           "device_id": "Feste ID aus Buchstaben, Zahlen, Punkten, Unterstrichen oder Bindestrichen.",
           "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist.",
+          "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
+          "recognition_api_key": "Der am Erkennungsserver konfigurierte API-Key. Er wird nur beim einmaligen HTTPS-Kopplungsaustausch übertragen.",
+          "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf.",
           "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename.",
           "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
       },
       "pairing_qr": {
         "title": "iPhone koppeln",
-        "description": "Öffne in der OpenPlate-App Verbindung, wähle Home-Assistant-QR-Code scannen und scanne diesen Code. Wähle danach Absenden. Der Code läuft nach 10 Minuten ab."
+        "description": "Scanne diesen Code mit der OpenPlate-App. Er enthält nur einen zufälligen Einmal-Token; alle Einstellungen und Schlüssel werden über HTTPS übertragen und der Token danach sofort ungültig. Wähle anschließend Absenden, um die Verbindung zu aktivieren."
       }
     },
     "error": {
       "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein.",
-      "invalid_device_id": "Verwende 1–64 Buchstaben, Zahlen, Punkte, Unterstriche oder Bindestriche."
+      "invalid_device_id": "Verwende 1–64 Buchstaben, Zahlen, Punkte, Unterstriche oder Bindestriche.",
+      "api_key_required": "Gib den API-Key des Erkennungsservers ein."
     },
     "abort": {
       "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."
@@ -51,15 +58,23 @@
       },
       "pairing": {
         "title": "iPhone koppeln",
-        "description": "Beim Koppeln wird ein neuer Signaturschlüssel erzeugt. Die bisherige iPhone-Verbindung bleibt gültig, bis du die QR-Code-Seite bestätigst.",
-        "data": {"home_assistant_url": "Home-Assistant-HTTPS-URL"},
+        "description": "Trage die vollständige Kamerakonfiguration einmalig in Home Assistant ein. Das iPhone erhält sie über einen verschlüsselten Einmal-Austausch per HTTPS.",
+        "data": {
+          "home_assistant_url": "Home-Assistant-HTTPS-URL",
+          "recognition_url": "HTTPS-URL des Erkennungsservers",
+          "recognition_api_key": "API-Key des Erkennungsservers",
+          "capture_interval": "Aufnahmeintervall (Sekunden)"
+        },
         "data_description": {
-          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist."
+          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist.",
+          "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
+          "recognition_api_key": "Wird nur beim einmaligen HTTPS-Austausch übertragen.",
+          "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf."
         }
       },
       "pairing_qr": {
         "title": "Kopplungscode scannen",
-        "description": "Scanne zuerst diesen Code in der OpenPlate-iPhone-App. Wähle danach Absenden, um den neuen Schlüssel zu aktivieren. Der Code läuft nach 10 Minuten ab; der bisherige App-Schlüssel funktioniert anschließend nicht mehr."
+        "description": "Scanne diesen Code in der OpenPlate-App. Er enthält kein dauerhaftes Geheimnis, sondern nur einen zufälligen Token für genau einen HTTPS-Austausch und höchstens 10 Minuten. Wähle anschließend Absenden, um die neue Konfiguration zu aktivieren."
       },
       "advanced": {
         "title": "Erweiterte Einstellungen",
@@ -70,7 +85,8 @@
       }
     },
     "error": {
-      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein."
+      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein.",
+      "api_key_required": "Gib den API-Key des Erkennungsservers ein."
     },
     "abort": {
       "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."

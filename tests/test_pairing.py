@@ -13,9 +13,8 @@ SPEC.loader.exec_module(pairing)
 def test_pairing_uri_contains_https_webhook_and_expiry() -> None:
     uri = pairing.build_pairing_uri(
         home_assistant_url="https://ha.example.test/",
-        webhook_id="webhook-id",
-        device_id="iphone_gate",
-        secret="x" * 32,
+        pairing_webhook_id="openplate_pairing",
+        token="x" * 32,
         issued_at=datetime.fromtimestamp(1_700_000_000, timezone.utc),
         lifetime_seconds=600,
     )
@@ -24,12 +23,10 @@ def test_pairing_uri_contains_https_webhook_and_expiry() -> None:
     values = parse_qs(parsed.query)
     assert (parsed.scheme, parsed.netloc) == ("openplate", "pair")
     assert values["version"] == ["1"]
-    assert values["device_id"] == ["iphone_gate"]
-    assert values["home_assistant_webhook_url"] == [
-        "https://ha.example.test/api/webhook/webhook-id"
-    ]
-    assert values["webhook_secret"] == ["x" * 32]
+    assert values["pairing_url"] == ["https://ha.example.test/api/webhook/openplate_pairing"]
+    assert values["token"] == ["x" * 32]
     assert values["expires_at"] == ["1700000600"]
+    assert "webhook_secret" not in values
 
 
 def test_pairing_rejects_insecure_or_ambiguous_base_urls() -> None:
