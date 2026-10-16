@@ -1,7 +1,7 @@
 name: openplate_mobile
 description: "Mounted iOS camera client for OpenPlate."
 publish_to: 'none'
-version: 0.5.0+6
+version: 0.6.0+7
 
 environment:
   sdk: ^3.11.1
@@ -20,6 +20,7 @@ dependencies:
   wakelock_plus: ^1.7.0
 
 dev_dependencies:
+  camera_platform_interface: ^2.15.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

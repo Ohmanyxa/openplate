@@ -29,7 +29,9 @@ void main() {
     () async {
       final client = RecordingClient();
       addTearDown(client.close);
-    final before = jsonDecode((await client.get(Uri.parse('$base/test/state'))).body);
+      final before = jsonDecode(
+        (await client.get(Uri.parse('$base/test/state'))).body,
+      );
       final bootstrap = jsonDecode(
         (await client.get(Uri.parse('$base/test/bootstrap'))).body,
       );
@@ -61,9 +63,12 @@ void main() {
       final state = jsonDecode(
         (await client.get(Uri.parse('$base/test/state'))).body,
       );
-    expect(state['recognized'], (before['recognized'] as int) + 1);
+      expect(state['recognized'], (before['recognized'] as int) + 1);
       expect(state['last_event']['plate'], 'BTEST1');
-    expect((state['last_event'] as Map<String, dynamic>).containsKey('session_id'), isFalse);
+      expect(
+        (state['last_event'] as Map<String, dynamic>).containsKey('session_id'),
+        isFalse,
+      );
       for (final body in client.bodies) {
         for (final secret in [pairing.key, settings.webhookSecret, 'BTEST1']) {
           expect(body.contains(secret), isFalse);

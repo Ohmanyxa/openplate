@@ -7,7 +7,7 @@ plate crop.
 
 The repository also contains the first mounted-camera vertical slice:
 
-- `apps/openplate_mobile`: Flutter/iOS camera client with foreground monitoring and black screen.
+- `apps/openplate_mobile`: Flutter/iOS camera client with local live preview, foreground recognition and switchable black screen.
 - `openplate-server`: authenticated local frame-recognition API with temporal confirmation.
 - `custom_components/openplate`: HACS-compatible signed webhook integration and HA entities.
 
@@ -51,6 +51,11 @@ Under **Configure**, manage plates or select **Configure recognition server** to
 recognition server HTTPS URL and API key. While open, the paired app retrieves these settings
 automatically within about 15 seconds, without another scan. It shows a waiting state until recognition
 is configured. The integration does not install or start the recognition server itself.
+
+The iPhone **Kamera öffnen** button always offers local preview, even without a recognition server.
+Start frame processing explicitly with **Erkennung starten**. **Schwarzmodus** hides the app surface
+while the camera and any running recognition continue; tap to reveal controls and return to preview.
+The app must stay in the foreground. See [camera controls](apps/openplate_mobile/README.md#live-preview-and-black-mode).
 
 The QR carries a temporary random 256-bit key, valid for one pairing and at most ten minutes.
 That key is never sent in a network request. Pairing, configuration and plate events use AES-256-GCM
