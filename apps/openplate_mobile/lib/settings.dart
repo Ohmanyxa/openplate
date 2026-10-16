@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'pairing.dart';
+import 'setup_help.dart';
 
 class OpenPlateSettings {
   const OpenPlateSettings({
@@ -44,6 +45,27 @@ class OpenPlateSettings {
 
   bool get isComplete =>
       isPaired && recognitionUrl.startsWith('https://') && apiKey.isNotEmpty;
+
+  String? get homeAssistantBaseUrl {
+    final uri = Uri.tryParse(homeAssistantWebhookUrl);
+    if (uri == null ||
+        uri.scheme != 'https' ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty) {
+      return null;
+    }
+    const webhookPath = '/api/webhook/';
+    final marker = uri.path.lastIndexOf(webhookPath);
+    if (marker < 0 || uri.path.substring(marker + webhookPath.length).isEmpty) {
+      return null;
+    }
+    return Uri(
+      scheme: uri.scheme,
+      host: uri.host,
+      port: uri.hasPort ? uri.port : null,
+      path: uri.path.substring(0, marker),
+    ).toString();
+  }
 
   static Future<OpenPlateSettings> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -159,6 +181,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SetupHelpScreen(
+                    homeAssistantUrl: widget.initial.homeAssistantBaseUrl,
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.help_outline),
+              label: const Text(
+                'Welche Adresse muss ich in Home Assistant eingeben?',
+              ),
+            ),
             FilledButton.tonalIcon(
               onPressed: _scanPairingCode,
               icon: const Icon(Icons.qr_code_scanner),

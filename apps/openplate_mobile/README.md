@@ -16,6 +16,11 @@ The QR contains only a random one-time token and HTTPS exchange endpoint. The ap
 settings through TLS; Home Assistant invalidates the token on first use or after ten minutes.
 Secrets are stored in the iOS Keychain. Both server certificates must be trusted by iOS.
 
+The question-mark button on the home screen opens setup help explaining which address belongs to
+Home Assistant and how to find it. Before the first scan, the app does not know that address.
+After pairing, the help screen displays a selectable, copyable Home Assistant base URL, excluding
+the private webhook ID and query parameters. Help is also available from connection settings.
+
 ## Development
 
 ```bash

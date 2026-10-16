@@ -9,6 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'openplate_api.dart';
 import 'pairing.dart';
 import 'settings.dart';
+import 'setup_help.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,7 +122,22 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     return Scaffold(
-      appBar: AppBar(title: const Text('OpenPlate Kamera')),
+      appBar: AppBar(
+        title: const Text('OpenPlate Kamera'),
+        actions: [
+          IconButton(
+            tooltip: 'Hilfe beim Koppeln',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SetupHelpScreen(
+                  homeAssistantUrl: settings.homeAssistantBaseUrl,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -175,6 +191,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: _pair,
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('iPhone per QR-Code koppeln'),
+              ),
+            if (!settings.isPaired)
+              TextButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const SetupHelpScreen(),
+                  ),
+                ),
+                icon: const Icon(Icons.help_outline),
+                label: const Text('Wo finde ich die benötigte Adresse?'),
               ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

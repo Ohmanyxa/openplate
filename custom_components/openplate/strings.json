@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Set up OpenPlate",
-        "description": "Only the Home Assistant HTTPS address reachable from your iPhone is needed. The QR code appears next. Device identity and keys are generated automatically. Configure plates and recognition afterwards.",
+        "description": "Enter the address of your Home Assistant installation, not the IP address of the iPhone. Use its HTTPS browser address without a page path such as /config/integrations. The iPhone must be able to reach it. The QR code appears next. The question-mark button in the OpenPlate app explains where to find this address.",
         "data": {
           "device_id": "Device ID",
           "home_assistant_url": "Home Assistant HTTPS URL",
@@ -15,7 +15,7 @@
         },
         "data_description": {
           "device_id": "Stable identifier using letters, numbers, dots, underscores or hyphens.",
-          "home_assistant_url": "HTTPS base URL reachable from the mounted iPhone.",
+          "home_assistant_url": "https:// with the host name or IP and port if needed. HTTPS must already be configured; simply changing http:// to https:// is not sufficient.",
           "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
           "recognition_api_key": "API key configured on the recognition server. It is transferred only through the one-time HTTPS pairing exchange.",
           "capture_interval": "How often the mounted iPhone captures a frame.",
@@ -61,7 +61,7 @@
       },
       "pairing": {
         "title": "Pair an iPhone",
-        "description": "Enter the Home Assistant HTTPS address reachable from your iPhone. The QR code appears next; no other settings are needed for pairing.",
+        "description": "Enter the HTTPS address of Home Assistant, not the IP address of the iPhone. Find it in your browser address bar and remove the page path such as /config/integrations. Open the question-mark button in the OpenPlate app for help.",
         "data": {
           "home_assistant_url": "Home Assistant HTTPS URL",
           "recognition_url": "Recognition server HTTPS URL",
@@ -69,7 +69,7 @@
           "capture_interval": "Capture interval (seconds)"
         },
         "data_description": {
-          "home_assistant_url": "HTTPS base URL reachable from the mounted iPhone.",
+          "home_assistant_url": "https:// with the host name or IP and port if needed. HTTPS must already be configured; simply changing http:// to https:// is not sufficient.",
           "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
           "recognition_api_key": "Transferred only during the one-time HTTPS exchange.",
           "capture_interval": "How often the mounted iPhone captures a frame."

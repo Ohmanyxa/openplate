@@ -3,10 +3,10 @@
     "step": {
       "user": {
         "title": "OpenPlate einrichten",
-        "description": "Zum Koppeln fehlt nur die HTTPS-Adresse von Home Assistant, die dein iPhone erreichen kann. Danach erscheint der QR-Code. Geräte-ID und Schlüssel werden automatisch erzeugt; Kennzeichen und Erkennungsserver kannst du anschließend konfigurieren.",
+        "description": "Hier ist die Adresse deiner Home-Assistant-Installation gemeint, nicht die IP-Adresse des iPhones. Nutze die HTTPS-Adresse aus der Browser-Adresszeile ohne Seitenpfad wie /config/integrations. Das iPhone muss diese Adresse erreichen können. Danach erscheint der QR-Code. Hilfe findest du auch über das Fragezeichen in der OpenPlate-App.",
         "data": {
           "device_id": "Geräte-ID",
-          "home_assistant_url": "Home-Assistant-HTTPS-URL",
+          "home_assistant_url": "Adresse von Home Assistant (HTTPS)",
           "recognition_url": "HTTPS-URL des Erkennungsservers",
           "recognition_api_key": "API-Key des Erkennungsservers",
           "capture_interval": "Aufnahmeintervall (Sekunden)",
@@ -15,7 +15,7 @@
         },
         "data_description": {
           "device_id": "Feste ID aus Buchstaben, Zahlen, Punkten, Unterstrichen oder Bindestrichen.",
-          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist.",
+          "home_assistant_url": "https:// mit Name oder IP und gegebenenfalls Port. HTTPS muss bereits eingerichtet sein; http:// einfach umzuschreiben reicht nicht.",
           "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
           "recognition_api_key": "Der am Erkennungsserver konfigurierte API-Key. Er wird nur beim einmaligen HTTPS-Kopplungsaustausch übertragen.",
           "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf.",
@@ -59,15 +59,15 @@
       },
       "pairing": {
         "title": "iPhone koppeln",
-        "description": "Gib die vom iPhone erreichbare HTTPS-Adresse von Home Assistant an. Danach erscheint der QR-Code; weitere Angaben sind zum Koppeln nicht erforderlich.",
+        "description": "Gib die HTTPS-Adresse deiner Home-Assistant-Installation ein, nicht die IP-Adresse des iPhones. Du findest sie in der Browser-Adresszeile; entferne den Seitenpfad wie /config/integrations. Hilfe findest du über das Fragezeichen in der OpenPlate-App.",
         "data": {
-          "home_assistant_url": "Home-Assistant-HTTPS-URL",
+          "home_assistant_url": "Adresse von Home Assistant (HTTPS)",
           "recognition_url": "HTTPS-URL des Erkennungsservers",
           "recognition_api_key": "API-Key des Erkennungsservers",
           "capture_interval": "Aufnahmeintervall (Sekunden)"
         },
         "data_description": {
-          "home_assistant_url": "HTTPS-Basis-URL, die vom montierten iPhone erreichbar ist.",
+          "home_assistant_url": "https:// mit Name oder IP und gegebenenfalls Port. HTTPS muss bereits eingerichtet sein; http:// einfach umzuschreiben reicht nicht.",
           "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
           "recognition_api_key": "Wird nur beim einmaligen HTTPS-Austausch übertragen.",
           "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf."
