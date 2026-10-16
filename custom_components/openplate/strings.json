@@ -3,38 +3,29 @@
     "step": {
       "user": {
         "title": "Set up OpenPlate",
-        "description": "Enter the address of your Home Assistant installation, not the IP address of the iPhone. Use its HTTPS browser address without a page path such as /config/integrations. The iPhone must be able to reach it. The QR code appears next. The question-mark button in the OpenPlate app explains where to find this address.",
+        "description": "OpenPlate encrypts its own connection. Use a local Home Assistant address such as http://homeassistant.local:8123 without setting up HTTPS certificates. The address is normally detected automatically. If this field appears, confirm or correct it to display the QR code.",
         "data": {
-          "device_id": "Device ID",
-          "home_assistant_url": "Home Assistant HTTPS URL",
-          "recognition_url": "Recognition server HTTPS URL",
-          "recognition_api_key": "Recognition server API key",
-          "capture_interval": "Capture interval (seconds)",
-          "plates": "Registered plates",
-          "absence_timeout": "Not-seen timeout (seconds)"
+          "home_assistant_url": "Home Assistant address"
         },
         "data_description": {
-          "device_id": "Stable identifier using letters, numbers, dots, underscores or hyphens.",
-          "home_assistant_url": "https:// with the host name or IP and port if needed. HTTPS must already be configured; simply changing http:// to https:// is not sufficient.",
-          "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
-          "recognition_api_key": "API key configured on the recognition server. It is transferred only through the one-time HTTPS pairing exchange.",
-          "capture_interval": "How often the mounted iPhone captures a frame.",
-          "plates": "One plate per line as PLATE=Display name.",
-          "absence_timeout": "How long a registered plate remains recently seen."
+          "home_assistant_url": "Address of your HA installation, not the iPhone. Local HTTP or HTTPS, without a page path such as /config/integrations."
         }
       },
       "pairing_qr": {
         "title": "Pair the iPhone",
-        "description": "Scan this code with the OpenPlate app. The code contains only a random one-time token; all settings and keys are transferred over HTTPS and the token is immediately invalidated. Then select Submit to activate the connection."
+        "description": "Open OpenPlate on the iPhone and scan this code with the pairing button. Then select Submit here. This single-use code expires after at most 10 minutes. Pairing, configuration and plate events are encrypted even over local HTTP. Keep the QR code private.",
+        "data": {
+          "qr_code": "Pair the iPhone"
+        }
       }
     },
     "error": {
-      "https_required": "Enter a complete HTTPS base URL without query parameters.",
-      "invalid_device_id": "Use 1–64 letters, numbers, dots, underscores or hyphens.",
+      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
+      "https_required": "The separate recognition server requires a complete HTTPS address.",
       "api_key_required": "Enter the recognition server API key."
     },
     "abort": {
-      "pairing_expired": "The pairing process is no longer available. Start it again."
+      "pairing_expired": "Pairing is no longer available. Generate a new QR code."
     }
   },
   "options": {
@@ -43,55 +34,63 @@
         "title": "Manage OpenPlate",
         "description": "Choose what you want to configure.",
         "menu_options": {
-          "plates": "Manage registered plates",
           "pairing": "Pair an iPhone",
+          "plates": "Manage registered plates",
           "recognition": "Configure recognition server",
+          "connection": "Change Home Assistant address",
           "advanced": "Advanced settings"
         }
       },
       "plates": {
         "title": "Registered plates",
-        "description": "Add, rename or remove plates. Changes are applied after submitting.",
+        "description": "Add, rename or remove plates. Changes apply after submitting.",
         "data": {
           "plates": "Registered plates"
         },
         "data_description": {
-          "plates": "One plate per line as PLATE=Display name. Spaces and hyphens in the plate are normalized."
+          "plates": "One plate per line as PLATE=Display name. Spaces and hyphens are normalized."
         }
       },
       "pairing": {
-        "title": "Pair an iPhone",
-        "description": "Enter the HTTPS address of Home Assistant, not the IP address of the iPhone. Find it in your browser address bar and remove the page path such as /config/integrations. Open the question-mark button in the OpenPlate app for help.",
+        "title": "Pair the iPhone",
+        "description": "Enter the local HTTP or HTTPS address of Home Assistant to display the encrypted pairing code. Pairing needs no iPhone IP, API key or certificates.",
         "data": {
-          "home_assistant_url": "Home Assistant HTTPS URL",
-          "recognition_url": "Recognition server HTTPS URL",
-          "recognition_api_key": "Recognition server API key",
-          "capture_interval": "Capture interval (seconds)"
+          "home_assistant_url": "Home Assistant address"
         },
         "data_description": {
-          "home_assistant_url": "https:// with the host name or IP and port if needed. HTTPS must already be configured; simply changing http:// to https:// is not sufficient.",
-          "recognition_url": "HTTPS base URL of the local OpenPlate recognition server.",
-          "recognition_api_key": "Transferred only during the one-time HTTPS exchange.",
-          "capture_interval": "How often the mounted iPhone captures a frame."
+          "home_assistant_url": "Address of your HA installation, not the iPhone. Local HTTP or HTTPS, without a page path such as /config/integrations."
+        }
+      },
+      "pairing_qr": {
+        "title": "Pair the iPhone",
+        "description": "Open OpenPlate on the iPhone and scan this code with the pairing button. Then select Submit here. This single-use code expires after at most 10 minutes. Pairing, configuration and plate events are encrypted even over local HTTP. Keep the QR code private.",
+        "data": {
+          "qr_code": "Pair the iPhone"
+        }
+      },
+      "connection": {
+        "title": "Home Assistant address",
+        "description": "Change this address if the QR points to an incorrect name or unreachable IP. Local HTTP is allowed because OpenPlate encrypts messages itself. Generate a new code under Pair an iPhone afterwards if needed.",
+        "data": {
+          "home_assistant_url": "Home Assistant address"
+        },
+        "data_description": {
+          "home_assistant_url": "Address of your HA installation, not the iPhone. Local HTTP or HTTPS, without a page path such as /config/integrations."
         }
       },
       "recognition": {
         "title": "Configure recognition server",
-        "description": "This is separate from iPhone pairing. Configure a running OpenPlate recognition server here. While open, the paired app retrieves changes automatically within about 15 seconds. This integration does not start the server itself.",
+        "description": "Configure the running recognition server separately from pairing. The open app retrieves changes automatically within about 15 seconds. Camera frames to the separate recognition server still require HTTPS. This integration does not start that server itself.",
         "data": {
           "recognition_url": "Recognition server HTTPS address",
           "recognition_api_key": "Recognition server API key",
           "capture_interval": "Capture interval (seconds)"
         },
         "data_description": {
-          "recognition_url": "Local OpenPlate server address with a TLS certificate trusted by the iPhone.",
+          "recognition_url": "Local OpenPlate server with a TLS certificate trusted by the iPhone.",
           "recognition_api_key": "API key configured on the recognition server.",
           "capture_interval": "How often the iPhone sends a camera frame for recognition."
         }
-      },
-      "pairing_qr": {
-        "title": "Scan the pairing code",
-        "description": "Scan this code in the OpenPlate app. It contains no permanent secret, only a random token that is valid for one HTTPS exchange and at most 10 minutes. Then select Submit to activate the new configuration."
       },
       "advanced": {
         "title": "Advanced settings",
@@ -104,11 +103,12 @@
       }
     },
     "error": {
-      "https_required": "Enter a complete HTTPS base URL without query parameters.",
+      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
+      "https_required": "The separate recognition server requires a complete HTTPS address.",
       "api_key_required": "Enter the recognition server API key."
     },
     "abort": {
-      "pairing_expired": "The pairing process is no longer available. Start it again."
+      "pairing_expired": "Pairing is no longer available. Generate a new QR code."
     }
   }
 }

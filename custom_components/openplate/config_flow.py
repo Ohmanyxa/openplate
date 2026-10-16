@@ -9,6 +9,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
     QrCodeSelector,
     QrCodeSelectorConfig,
@@ -28,6 +29,7 @@ from .const import (
     CONF_RECOGNITION_API_KEY,
     CONF_RECOGNITION_URL,
     CONF_SECRET,
+    CONF_TRANSPORT_VERSION,
     CONF_WEBHOOK_ID,
     DEFAULT_ABSENCE_TIMEOUT,
     DEFAULT_CAPTURE_INTERVAL,
@@ -35,7 +37,7 @@ from .const import (
     PAIRING_CODE_LIFETIME_SECONDS,
     PAIRING_WEBHOOK_ID,
 )
-from .pairing import build_pairing_uri, normalize_https_base_url
+from .pairing import build_pairing_uri, normalize_base_url, normalize_https_base_url
 from .pairing_webhook import async_ensure_pairing_gateway
 
 _QR_FIELD = "qr_code"
@@ -55,7 +57,7 @@ def _setup_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
         {
             vol.Required(
                 CONF_HOME_ASSISTANT_URL,
-                default=values.get(CONF_HOME_ASSISTANT_URL, ""),
+                default=values.get(CONF_HOME_ASSISTANT_URL) or "http://homeassistant.local:8123",
             ): str,
         }
     )
@@ -78,13 +80,22 @@ def _qr_schema(pairing_uri: str) -> vol.Schema:
 def _default_home_assistant_url(
     flow: config_entries.ConfigFlow | config_entries.OptionsFlow,
 ) -> str:
-    for value in (flow.hass.config.internal_url, flow.hass.config.external_url):
-        if value:
+    if flow.hass.config.internal_url:
+        try:
+            return normalize_base_url(flow.hass.config.internal_url)
+        except ValueError:
+            pass
+    try:
+        return normalize_base_url(
+            get_url(flow.hass, allow_external=False, allow_cloud=False, prefer_external=False)
+        )
+    except (NoURLAvailableError, ValueError):
+        if flow.hass.config.external_url:
             try:
-                return normalize_https_base_url(value)
+                return normalize_base_url(flow.hass.config.external_url)
             except ValueError:
-                continue
-    return ""
+                pass
+        return ""
 
 
 def _create_pairing_uri(
@@ -92,14 +103,15 @@ def _create_pairing_uri(
     configuration: dict[str, Any],
 ) -> str:
     gateway = async_ensure_pairing_gateway(flow.hass)
-    token, _expires_at = gateway.create_offer(
+    offer_id, key, _expires_at = gateway.create_offer(
         mobile_configuration(configuration),
         lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
     )
     return build_pairing_uri(
         home_assistant_url=configuration[CONF_HOME_ASSISTANT_URL],
         pairing_webhook_id=PAIRING_WEBHOOK_ID,
-        token=token,
+        offer_id=offer_id,
+        key=key,
         lifetime_seconds=PAIRING_CODE_LIFETIME_SECONDS,
     )
 
@@ -107,7 +119,7 @@ def _create_pairing_uri(
 class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure one mounted OpenPlate camera."""
 
-    VERSION = 3
+    VERSION = 4
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None
@@ -121,9 +133,9 @@ class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input = {CONF_HOME_ASSISTANT_URL: known_url}
         if user_input is not None:
             try:
-                home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
+                home_assistant_url = normalize_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
-                errors[CONF_HOME_ASSISTANT_URL] = "https_required"
+                errors[CONF_HOME_ASSISTANT_URL] = "invalid_ha_url"
             if not errors:
                 device_id = f"iphone_{secrets.token_hex(6)}"
                 await self.async_set_unique_id(device_id)
@@ -139,6 +151,7 @@ class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_PLATES: "",
                     CONF_ABSENCE_TIMEOUT: DEFAULT_ABSENCE_TIMEOUT,
                     CONF_SECRET: secret,
+                    CONF_TRANSPORT_VERSION: 2,
                     CONF_WEBHOOK_ID: webhook_id,
                 }
                 self._pairing_uri = _create_pairing_uri(self, self._pending_data)
@@ -183,7 +196,8 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         return self.async_show_menu(
-            step_id="init", menu_options=["pairing", "plates", "recognition", "advanced"]
+            step_id="init",
+            menu_options=["pairing", "plates", "recognition", "connection", "advanced"],
         )
 
     async def async_step_plates(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -209,15 +223,16 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
             user_input = {CONF_HOME_ASSISTANT_URL: default_url}
         if user_input is not None:
             try:
-                home_assistant_url = normalize_https_base_url(user_input[CONF_HOME_ASSISTANT_URL])
+                home_assistant_url = normalize_base_url(user_input[CONF_HOME_ASSISTANT_URL])
             except ValueError:
-                errors[CONF_HOME_ASSISTANT_URL] = "https_required"
+                errors[CONF_HOME_ASSISTANT_URL] = "invalid_ha_url"
             if not errors:
                 secret = secrets.token_urlsafe(32)
                 self._pending_options = self._updated_options(
                     {
                         CONF_HOME_ASSISTANT_URL: home_assistant_url,
                         CONF_SECRET: secret,
+                        CONF_TRANSPORT_VERSION: 2,
                     }
                 )
                 configuration = {**self._current, **self._pending_options}
@@ -226,6 +241,22 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="pairing",
             data_schema=_setup_schema(user_input or {CONF_HOME_ASSISTANT_URL: default_url}),
+            errors=errors,
+        )
+
+    async def async_step_connection(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                url = normalize_base_url(user_input[CONF_HOME_ASSISTANT_URL])
+                return self.async_create_entry(
+                    title="", data=self._updated_options({CONF_HOME_ASSISTANT_URL: url})
+                )
+            except ValueError:
+                errors[CONF_HOME_ASSISTANT_URL] = "invalid_ha_url"
+        return self.async_show_form(
+            step_id="connection",
+            data_schema=_setup_schema(user_input or self._current),
             errors=errors,
         )
 

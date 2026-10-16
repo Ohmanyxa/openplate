@@ -253,6 +253,7 @@ class _MonitorScreenState extends State<MonitorScreen>
   String? _lastPlate;
   int _failures = 0;
   final List<PendingPlateEvent> _pendingEvents = [];
+  late final OpenPlateApi _api = OpenPlateApi(widget.settings);
 
   @override
   void initState() {
@@ -298,7 +299,7 @@ class _MonitorScreenState extends State<MonitorScreen>
     XFile? picture;
     try {
       picture = await controller.takePicture();
-      final api = OpenPlateApi(widget.settings);
+      final api = _api;
       await _flushPending(api);
       final result = await api.recognize(picture.path);
       for (final plate in result.where((item) => item.newEvent)) {

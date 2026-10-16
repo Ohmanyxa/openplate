@@ -1,0 +1,17 @@
+{
+  "secret": "0123456789abcdef0123456789abcdef0123456789a",
+  "context": "device/request/test-webhook",
+  "payload": {
+    "schema_version": 1,
+    "event_type": "plate.observed",
+    "plate": "MÄ123",
+    "device_id": "iphone_test"
+  },
+  "envelope": {
+    "version": 2,
+    "id": "01234567-89ab-4cde-8fab-0123456789ab",
+    "timestamp": 1700000000,
+    "nonce": "AAECAwQFBgcICQoL",
+    "ciphertext": "Gt25wc_c4yv6GzYjU-CpNkrEH7Czoti-OayTD_oxwrCopSVr8NFmP9JO1M539vAEjQOAl2ytaP8xRqwfBRuPWOGB3iGn5vXwPKxFnT4iltxKUDyH7DV7u3_ksRKdSgtor_rjcBHjkm38Mo-lNg"
+  }
+}

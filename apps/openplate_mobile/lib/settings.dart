@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'pairing.dart';
 import 'setup_help.dart';
+import 'connection_url.dart';
 
 class OpenPlateSettings {
   const OpenPlateSettings({
@@ -39,7 +40,7 @@ class OpenPlateSettings {
   );
 
   bool get isPaired =>
-      homeAssistantWebhookUrl.startsWith('https://') &&
+      isHomeAssistantUrl(Uri.tryParse(homeAssistantWebhookUrl) ?? Uri()) &&
       deviceId.isNotEmpty &&
       webhookSecret.length >= 32;
 
@@ -48,10 +49,7 @@ class OpenPlateSettings {
 
   String? get homeAssistantBaseUrl {
     final uri = Uri.tryParse(homeAssistantWebhookUrl);
-    if (uri == null ||
-        uri.scheme != 'https' ||
-        uri.host.isEmpty ||
-        uri.userInfo.isNotEmpty) {
+    if (uri == null || uri.host.isEmpty || uri.userInfo.isNotEmpty) {
       return null;
     }
     const webhookPath = '/api/webhook/';
@@ -59,12 +57,13 @@ class OpenPlateSettings {
     if (marker < 0 || uri.path.substring(marker + webhookPath.length).isEmpty) {
       return null;
     }
-    return Uri(
+    final base = Uri(
       scheme: uri.scheme,
       host: uri.host,
       port: uri.hasPort ? uri.port : null,
       path: uri.path.substring(0, marker),
-    ).toString();
+    );
+    return isHomeAssistantUrl(base) ? base.toString() : null;
   }
 
   static Future<OpenPlateSettings> load() async {
@@ -134,6 +133,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty
         ? null
         : 'Eine vollständige HTTPS-URL eingeben';
+  }
+
+  String? _homeAssistantUrl(String? value) {
+    final uri = Uri.tryParse(value ?? '');
+    return uri != null && isHomeAssistantUrl(uri)
+        ? null
+        : 'Eine lokale HTTP-Adresse oder HTTPS-Adresse eingeben';
   }
 
   Future<void> _scanPairingCode() async {
@@ -229,15 +235,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               controller: _webhook,
               decoration: const InputDecoration(
                 labelText: 'Home-Assistant-Webhook',
-                hintText: 'https://homeassistant.local/api/webhook/…',
+                hintText: 'http://homeassistant.local:8123/api/webhook/…',
               ),
               keyboardType: TextInputType.url,
-              validator: _httpsUrl,
+              validator: _homeAssistantUrl,
             ),
             TextFormField(
               controller: _secret,
               decoration: const InputDecoration(
-                labelText: 'Webhook-Signaturschlüssel',
+                labelText: 'Verbindungsschlüssel',
               ),
               obscureText: true,
               validator: (value) =>

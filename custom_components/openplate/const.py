@@ -12,6 +12,7 @@ CONF_HOME_ASSISTANT_URL = "home_assistant_url"
 CONF_RECOGNITION_URL = "recognition_url"
 CONF_RECOGNITION_API_KEY = "recognition_api_key"
 CONF_CAPTURE_INTERVAL = "capture_interval"
+CONF_TRANSPORT_VERSION = "transport_version"
 
 DEFAULT_ABSENCE_TIMEOUT = 30
 DEFAULT_CAPTURE_INTERVAL = 1

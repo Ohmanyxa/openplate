@@ -32,3 +32,44 @@ jobs:
           PYTHONPATH: .
         run: uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' python -m unittest discover -s integrations/home_assistant/tests -v
 
+  flutter:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/openplate_mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.14"
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.41.4"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Encrypted Dart and Home Assistant round trip over HTTP
+        run: |
+          task_test_dir="$(mktemp -d)"
+          PYTHONPATH=../.. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+            python ../../integrations/home_assistant/tests/interop_server.py > "$task_test_dir/server.log" 2>&1 &
+          task_server_pid=$!
+          trap 'kill "$task_server_pid" 2>/dev/null || true' EXIT
+          task_test_url=""
+          for task_attempt in {1..120}; do
+            task_test_url="$(jq -rR 'fromjson? | select(type == "object") | .url // empty' "$task_test_dir/server.log" | head -n 1)"
+            if [ -n "$task_test_url" ]; then break; fi
+            if ! kill -0 "$task_server_pid" 2>/dev/null; then
+              cat "$task_test_dir/server.log"
+              exit 1
+            fi
+            sleep 1
+          done
+          if [ -z "$task_test_url" ]; then
+            cat "$task_test_dir/server.log"
+            exit 1
+          fi
+          OPENPLATE_INTEROP_URL="$task_test_url" flutter test test/http_interop_test.dart
+

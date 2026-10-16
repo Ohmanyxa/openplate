@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:uuid/uuid.dart';
 
 import 'pairing.dart';
 import 'settings.dart';
+import 'encryption.dart';
+import 'connection_url.dart';
 
 class ConfirmedPlate {
   const ConfirmedPlate({
@@ -44,14 +45,15 @@ class OpenPlateApi {
 
   final OpenPlateSettings settings;
   final http.Client? _client;
+  String? _sessionId;
 
   Future<OpenPlateSettings> refreshConfiguration() async {
-    final body = jsonEncode({
+    final body = {
       'schema_version': 1,
       'event_type': 'device.configuration',
       'device_id': settings.deviceId,
-    });
-    final response = await _signedPost(body, const Uuid().v4());
+    };
+    final response = await _encryptedPost(body);
     if (response.statusCode != 200) {
       throw HttpException('Home Assistant ${response.statusCode}');
     }
@@ -61,15 +63,30 @@ class OpenPlateApi {
     if (configuration.deviceId != settings.deviceId) {
       throw const FormatException('Unerwartete Geräte-ID');
     }
+    final sessionId =
+        (jsonDecode(response.body) as Map<String, dynamic>)['session_id'];
+    if (sessionId is! String || sessionId.length < 16) {
+      throw const FormatException('Ungültige Verbindungssitzung');
+    }
+    _sessionId = sessionId;
     return OpenPlateSettings.fromPairing(configuration);
   }
 
   Future<List<ConfirmedPlate>> recognize(String imagePath) async {
+    final base = Uri.parse(settings.recognitionUrl);
+    if (base.scheme != 'https' ||
+        base.host.isEmpty ||
+        base.userInfo.isNotEmpty ||
+        base.hasQuery ||
+        base.hasFragment) {
+      throw const FormatException('Der Erkennungsserver benötigt HTTPS');
+    }
     final request =
         http.MultipartRequest(
             'POST',
             Uri.parse('${settings.recognitionUrl}/v1/recognize'),
           )
+          ..followRedirects = false
           ..headers['X-OpenPlate-Api-Key'] = settings.apiKey
           ..fields['device_id'] = settings.deviceId
           ..files.add(await http.MultipartFile.fromPath('image', imagePath));
@@ -86,8 +103,9 @@ class OpenPlateApi {
   }
 
   Future<void> sendHomeAssistantEvent(PendingPlateEvent event) async {
+    if (_sessionId == null) await refreshConfiguration();
     final plate = event.plate;
-    final body = jsonEncode({
+    final body = <String, dynamic>{
       'schema_version': 1,
       'event_id': event.eventId,
       'device_id': settings.deviceId,
@@ -96,32 +114,55 @@ class OpenPlateApi {
       'plate': plate.plate,
       'confidence': plate.confidence,
       'observations': plate.observations,
-    });
-    final response = await _signedPost(body, event.eventId);
-    // 409 means Home Assistant already accepted this stable event ID but its
-    // original response was lost. Treat that replay-safe retry as delivered.
-    if ((response.statusCode < 200 || response.statusCode >= 300) &&
-        response.statusCode != 409) {
+      'session_id': _sessionId,
+    };
+    var response = await _encryptedPost(body);
+    if (response.statusCode == 428) {
+      await refreshConfiguration();
+      body['session_id'] = _sessionId;
+      response = await _encryptedPost(body);
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
       throw HttpException('Home Assistant ${response.statusCode}');
+    }
+    if (jsonDecode(response.body)['accepted'] != true) {
+      throw const FormatException(
+        'Home Assistant hat das Ereignis nicht bestätigt',
+      );
     }
   }
 
-  Future<http.Response> _signedPost(String body, String nonce) async {
-    final timestamp = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
-    final message = '$timestamp\n$nonce\n$body';
-    final signature = Hmac(
-      sha256,
-      utf8.encode(settings.webhookSecret),
-    ).convert(utf8.encode(message)).toString();
-    return await (_client?.post ?? http.post)(
-      Uri.parse(settings.homeAssistantWebhookUrl),
-      headers: {
-        HttpHeaders.contentTypeHeader: 'application/json',
-        'X-OpenPlate-Timestamp': '$timestamp',
-        'X-OpenPlate-Nonce': nonce,
-        'X-OpenPlate-Signature': signature,
-      },
-      body: body,
-    ).timeout(const Duration(seconds: 10));
+  Future<http.Response> _encryptedPost(Map<String, dynamic> body) async {
+    final uri = Uri.parse(settings.homeAssistantWebhookUrl);
+    if (!isHomeAssistantUrl(uri)) {
+      throw const FormatException('Ungültige HA-Adresse');
+    }
+    final webhookId = uri.pathSegments.last;
+    final envelope = await EncryptedTransport.seal(
+      body,
+      settings.webhookSecret,
+      'device/request/$webhookId',
+    );
+    final client = _client ?? http.Client();
+    try {
+      final request = http.Request('POST', uri)
+        ..followRedirects = false
+        ..headers[HttpHeaders.contentTypeHeader] = 'application/json'
+        ..body = jsonEncode(envelope);
+      final streamed = await client
+          .send(request)
+          .timeout(const Duration(seconds: 10));
+      final response = await http.Response.fromStream(
+        streamed,
+      ).timeout(const Duration(seconds: 10));
+      final payload = await EncryptedTransport.unseal(
+        jsonDecode(response.body),
+        settings.webhookSecret,
+        'device/response/$webhookId/${envelope['id']}/${response.statusCode}',
+      );
+      return http.Response(jsonEncode(payload), response.statusCode);
+    } finally {
+      if (_client == null) client.close();
+    }
   }
 }

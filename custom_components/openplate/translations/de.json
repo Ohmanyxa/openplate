@@ -3,38 +3,29 @@
     "step": {
       "user": {
         "title": "OpenPlate einrichten",
-        "description": "Hier ist die Adresse deiner Home-Assistant-Installation gemeint, nicht die IP-Adresse des iPhones. Nutze die HTTPS-Adresse aus der Browser-Adresszeile ohne Seitenpfad wie /config/integrations. Das iPhone muss diese Adresse erreichen können. Danach erscheint der QR-Code. Hilfe findest du auch über das Fragezeichen in der OpenPlate-App.",
+        "description": "OpenPlate verschlüsselt die Verbindung selbst. Du kannst deine lokale Home-Assistant-Adresse wie http://homeassistant.local:8123 verwenden; HTTPS-Zertifikate sind dafür nicht erforderlich. Normalerweise wird die Adresse automatisch ermittelt. Falls du dieses Feld siehst, bestätige oder korrigiere sie. Danach erscheint der QR-Code.",
         "data": {
-          "device_id": "Geräte-ID",
-          "home_assistant_url": "Adresse von Home Assistant (HTTPS)",
-          "recognition_url": "HTTPS-URL des Erkennungsservers",
-          "recognition_api_key": "API-Key des Erkennungsservers",
-          "capture_interval": "Aufnahmeintervall (Sekunden)",
-          "plates": "Registrierte Kennzeichen",
-          "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+          "home_assistant_url": "Adresse von Home Assistant"
         },
         "data_description": {
-          "device_id": "Feste ID aus Buchstaben, Zahlen, Punkten, Unterstrichen oder Bindestrichen.",
-          "home_assistant_url": "https:// mit Name oder IP und gegebenenfalls Port. HTTPS muss bereits eingerichtet sein; http:// einfach umzuschreiben reicht nicht.",
-          "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
-          "recognition_api_key": "Der am Erkennungsserver konfigurierte API-Key. Er wird nur beim einmaligen HTTPS-Kopplungsaustausch übertragen.",
-          "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf.",
-          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename.",
-          "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
+          "home_assistant_url": "Adresse deiner HA-Installation, nicht des iPhones. Lokales HTTP oder HTTPS, ohne Seitenpfad wie /config/integrations."
         }
       },
       "pairing_qr": {
         "title": "iPhone koppeln",
-        "description": "Öffne OpenPlate auf dem iPhone und tippe auf iPhone per QR-Code koppeln. Scanne diesen Code und wähle danach hier Absenden. Der Code ist einmalig und 10 Minuten gültig; die Verbindung ist HTTPS-verschlüsselt. Kennzeichen und Erkennungsserver richtest du anschließend unter Konfigurieren ein. Das iPhone übernimmt die Servereinstellungen automatisch."
+        "description": "Öffne OpenPlate auf dem iPhone und scanne diesen Code über iPhone per QR-Code koppeln. Wähle danach hier Absenden. Der Einmal-Code ist höchstens 10 Minuten gültig. Kopplung, Einstellungen und Kennzeichenmeldungen werden auch bei lokalem HTTP verschlüsselt. Teile den QR-Code nicht mit anderen.",
+        "data": {
+          "qr_code": "iPhone koppeln"
+        }
       }
     },
     "error": {
-      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein.",
-      "invalid_device_id": "Verwende 1–64 Buchstaben, Zahlen, Punkte, Unterstriche oder Bindestriche.",
-      "api_key_required": "Gib den API-Key des Erkennungsservers ein."
+      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
+      "https_required": "Für den separaten Erkennungsserver ist eine vollständige HTTPS-Adresse erforderlich.",
+      "api_key_required": "Gib den API-Schlüssel des Erkennungsservers ein."
     },
     "abort": {
-      "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."
+      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."
     }
   },
   "options": {
@@ -43,39 +34,53 @@
         "title": "OpenPlate verwalten",
         "description": "Wähle aus, was du konfigurieren möchtest.",
         "menu_options": {
-          "plates": "Kennzeichen verwalten",
           "pairing": "iPhone koppeln",
+          "plates": "Kennzeichen verwalten",
           "recognition": "Erkennungsserver einrichten",
+          "connection": "Home-Assistant-Adresse ändern",
           "advanced": "Erweiterte Einstellungen"
         }
       },
       "plates": {
         "title": "Registrierte Kennzeichen",
         "description": "Füge Kennzeichen hinzu, benenne sie um oder entferne sie. Änderungen werden nach dem Absenden übernommen.",
-        "data": {"plates": "Registrierte Kennzeichen"},
+        "data": {
+          "plates": "Registrierte Kennzeichen"
+        },
         "data_description": {
-          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename. Leerzeichen und Bindestriche im Kennzeichen werden normalisiert."
+          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename. Leerzeichen und Bindestriche werden normalisiert."
         }
       },
       "pairing": {
         "title": "iPhone koppeln",
-        "description": "Gib die HTTPS-Adresse deiner Home-Assistant-Installation ein, nicht die IP-Adresse des iPhones. Du findest sie in der Browser-Adresszeile; entferne den Seitenpfad wie /config/integrations. Hilfe findest du über das Fragezeichen in der OpenPlate-App.",
+        "description": "Gib die lokale HTTP-Adresse oder HTTPS-Adresse von Home Assistant ein. Danach erscheint der verschlüsselte Einmal-Code. Eine iPhone-IP, ein API-Key oder Zertifikate sind zum Koppeln nicht erforderlich.",
         "data": {
-          "home_assistant_url": "Adresse von Home Assistant (HTTPS)",
-          "recognition_url": "HTTPS-URL des Erkennungsservers",
-          "recognition_api_key": "API-Key des Erkennungsservers",
-          "capture_interval": "Aufnahmeintervall (Sekunden)"
+          "home_assistant_url": "Adresse von Home Assistant"
         },
         "data_description": {
-          "home_assistant_url": "https:// mit Name oder IP und gegebenenfalls Port. HTTPS muss bereits eingerichtet sein; http:// einfach umzuschreiben reicht nicht.",
-          "recognition_url": "HTTPS-Basis-URL des lokalen OpenPlate-Erkennungsservers.",
-          "recognition_api_key": "Wird nur beim einmaligen HTTPS-Austausch übertragen.",
-          "capture_interval": "So häufig nimmt das montierte iPhone ein Bild auf."
+          "home_assistant_url": "Adresse deiner HA-Installation, nicht des iPhones. Lokales HTTP oder HTTPS, ohne Seitenpfad wie /config/integrations."
+        }
+      },
+      "pairing_qr": {
+        "title": "iPhone koppeln",
+        "description": "Öffne OpenPlate auf dem iPhone und scanne diesen Code über iPhone per QR-Code koppeln. Wähle danach hier Absenden. Der Einmal-Code ist höchstens 10 Minuten gültig. Kopplung, Einstellungen und Kennzeichenmeldungen werden auch bei lokalem HTTP verschlüsselt. Teile den QR-Code nicht mit anderen.",
+        "data": {
+          "qr_code": "iPhone koppeln"
+        }
+      },
+      "connection": {
+        "title": "Home-Assistant-Adresse",
+        "description": "Ändere die Adresse, wenn der QR-Code auf einen falschen Namen oder eine nicht erreichbare IP verweist. Lokales HTTP ist erlaubt: OpenPlate verschlüsselt die Nachrichten selbst. Erstelle danach bei Bedarf einen neuen QR-Code über iPhone koppeln.",
+        "data": {
+          "home_assistant_url": "Adresse von Home Assistant"
+        },
+        "data_description": {
+          "home_assistant_url": "Adresse deiner HA-Installation, nicht des iPhones. Lokales HTTP oder HTTPS, ohne Seitenpfad wie /config/integrations."
         }
       },
       "recognition": {
         "title": "Erkennungsserver einrichten",
-        "description": "Diese Einrichtung ist unabhängig von der iPhone-Kopplung. Trage den laufenden OpenPlate-Erkennungsserver ein. Das gekoppelte iPhone übernimmt die Einstellungen innerhalb von etwa 15 Sekunden, während die App geöffnet ist. Die Integration startet den Server bisher nicht selbst.",
+        "description": "Der laufende Erkennungsserver wird unabhängig von der Kopplung eingerichtet. Die App übernimmt Änderungen automatisch innerhalb von etwa 15 Sekunden. Für die Kamerabilder zum separaten Erkennungsserver ist weiterhin HTTPS erforderlich. Die Integration startet diesen Server nicht selbst.",
         "data": {
           "recognition_url": "HTTPS-Adresse des Erkennungsservers",
           "recognition_api_key": "API-Schlüssel des Erkennungsservers",
@@ -87,24 +92,23 @@
           "capture_interval": "So häufig sendet das iPhone ein Kamerabild zur Erkennung."
         }
       },
-      "pairing_qr": {
-        "title": "Kopplungscode scannen",
-        "description": "Scanne diesen Code in der OpenPlate-App. Er enthält kein dauerhaftes Geheimnis, sondern nur einen zufälligen Token für genau einen HTTPS-Austausch und höchstens 10 Minuten. Wähle anschließend Absenden, um die neue Konfiguration zu aktivieren."
-      },
       "advanced": {
         "title": "Erweiterte Einstellungen",
-        "data": {"absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"},
+        "data": {
+          "absence_timeout": "Zeit bis nicht mehr gesehen (Sekunden)"
+        },
         "data_description": {
           "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
       }
     },
     "error": {
-      "https_required": "Gib eine vollständige HTTPS-Basis-URL ohne Abfrageparameter ein.",
-      "api_key_required": "Gib den API-Key des Erkennungsservers ein."
+      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
+      "https_required": "Für den separaten Erkennungsserver ist eine vollständige HTTPS-Adresse erforderlich.",
+      "api_key_required": "Gib den API-Schlüssel des Erkennungsservers ein."
     },
     "abort": {
-      "pairing_expired": "Der Kopplungsvorgang ist nicht mehr verfügbar. Starte ihn erneut."
+      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."
     }
   }
 }

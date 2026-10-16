@@ -14,7 +14,8 @@ def test_pairing_uri_contains_https_webhook_and_expiry() -> None:
     uri = pairing.build_pairing_uri(
         home_assistant_url="https://ha.example.test/",
         pairing_webhook_id="openplate_pairing",
-        token="x" * 32,
+        offer_id="offer012345678901",
+        key="x" * 43,
         issued_at=datetime.fromtimestamp(1_700_000_000, timezone.utc),
         lifetime_seconds=600,
     )
@@ -22,11 +23,34 @@ def test_pairing_uri_contains_https_webhook_and_expiry() -> None:
     parsed = urlsplit(uri)
     values = parse_qs(parsed.query)
     assert (parsed.scheme, parsed.netloc) == ("openplate", "pair")
-    assert values["version"] == ["1"]
+    assert values["version"] == ["2"]
     assert values["pairing_url"] == ["https://ha.example.test/api/webhook/openplate_pairing"]
-    assert values["token"] == ["x" * 32]
+    assert values["key"] == ["x" * 43]
+    assert values["offer_id"] == ["offer012345678901"]
     assert values["expires_at"] == ["1700000600"]
     assert "webhook_secret" not in values
+    assert "token" not in values
+
+
+def test_local_http_is_allowed_only_for_encrypted_ha_channel() -> None:
+    for value in (
+        "http://homeassistant.local:8123",
+        "http://192.168.1.10:8123",
+        "http://[fd00::1]:8123",
+    ):
+        assert pairing.normalize_base_url(value) == value
+    for value in (
+        "http://example.com",
+        "http://8.8.8.8",
+        "https://user:password@ha.local",
+        "https://ha.local:invalid",
+    ):
+        try:
+            pairing.normalize_base_url(value)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Expected {value!r} to be rejected")
 
 
 def test_pairing_rejects_insecure_or_ambiguous_base_urls() -> None:

@@ -30,7 +30,8 @@ uv run openplate-server --host 0.0.0.0 --port 8844 \
   --ssl-certfile /path/to/fullchain.pem --ssl-keyfile /path/to/privkey.pem
 ```
 
-The mounted iPhone client accepts HTTPS endpoints only. See
+The recognition server requires HTTPS. The Home Assistant connection also supports local HTTP
+with application-level authenticated encryption and needs no HA certificates. See
 [the Home Assistant setup guide](integrations/home_assistant/README.md) for the complete flow.
 
 ## Home Assistant
@@ -40,8 +41,9 @@ In HACS, open **Custom repositories**, add `https://github.com/Ohmanyxa/openplat
 **Settings → Devices & services**. Releases are the supported installation source; the default branch
 is development code.
 
-Adding OpenPlate opens the QR pairing code directly when Home Assistant knows its HTTPS address.
-Otherwise, only that address is requested. On the iPhone, tap **iPhone per QR-Code koppeln**, scan,
+Adding OpenPlate detects the local Home Assistant address and opens the QR pairing code directly.
+If detection fails, confirm or correct the suggested `http://homeassistant.local:8123` address.
+On the iPhone, tap **iPhone per QR-Code koppeln**, scan,
 then confirm the QR screen in Home Assistant. Device identity and keys are generated automatically;
 server settings and registered plates are not required for pairing.
 
@@ -50,8 +52,14 @@ recognition server HTTPS URL and API key. While open, the paired app retrieves t
 automatically within about 15 seconds, without another scan. It shows a waiting state until recognition
 is configured. The integration does not install or start the recognition server itself.
 
-QR tokens are random, single-use and valid for at most ten minutes. Pairing and authenticated
-configuration refresh use HTTPS; iPhone secrets are kept in Keychain.
+The QR carries a temporary random 256-bit key, valid for one pairing and at most ten minutes.
+That key is never sent in a network request. Pairing, configuration and plate events use AES-256-GCM
+and HKDF-SHA256, including over local HTTP. iPhone secrets are kept in Keychain. See the
+[encrypted transport specification](docs/ENCRYPTED_TRANSPORT.md).
+
+For an upgrade from earlier releases, update both the HA integration and iPhone app, restart HA,
+then pair again to rotate the device key and enable encrypted-only transport. HA's web interface
+itself is not encrypted by OpenPlate. Open the QR from your trusted HA interface and keep it private.
 
 Outputs default to `output/annotated.jpg` and `output/crops/`. The JSON written to stdout contains the
 recognized text, confidences, pixel bounding boxes and measured stage durations. Use `--help` for

@@ -1,4 +1,4 @@
-"""One-time HTTPS pairing endpoint for the OpenPlate iPhone app."""
+"""One-time encrypted pairing, including over local HTTP."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from homeassistant.components import webhook
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN, MAX_BODY_BYTES, PAIRING_WEBHOOK_ID
+from .encryption import seal, unseal
 
 _PAIRING_DATA_KEY = "pairing_gateway"
 
@@ -23,6 +24,7 @@ class PairingOffer:
 
     expires_at: float
     configuration: dict[str, Any]
+    key: str
 
 
 class PairingGateway:
@@ -33,13 +35,14 @@ class PairingGateway:
 
     def create_offer(
         self, configuration: dict[str, Any], *, lifetime_seconds: int
-    ) -> tuple[str, int]:
+    ) -> tuple[str, str, int]:
         now = time.time()
         self._expire(now)
-        token = secrets.token_urlsafe(32)
+        offer_id = secrets.token_urlsafe(18)
+        key = secrets.token_urlsafe(32)
         expires_at = int(now + lifetime_seconds)
-        self.offers[token] = PairingOffer(expires_at, dict(configuration))
-        return token, expires_at
+        self.offers[offer_id] = PairingOffer(expires_at, dict(configuration), key)
+        return offer_id, key, expires_at
 
     async def handle_webhook(
         self, _hass: HomeAssistant, _webhook_id: str, request: web.Request
@@ -51,18 +54,30 @@ class PairingGateway:
             return self._response({"error": "payload too large"}, status=413)
         try:
             payload = json.loads(body)
-            token = payload["token"]
-            if not isinstance(token, str):
+            offer_id = payload["offer_id"]
+            if not isinstance(offer_id, str):
                 raise TypeError
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (ValueError, KeyError, TypeError):
             return self._response({"error": "invalid pairing request"}, status=400)
 
         now = time.time()
         self._expire(now)
-        offer = self.offers.pop(token, None)
+        offer = self.offers.get(offer_id)
         if offer is None:
             return self._response({"error": "invalid or expired pairing token"}, status=401)
-        return self._response({"schema_version": 1, **offer.configuration}, status=200)
+        try:
+            request_data = unseal(payload["envelope"], offer.key, f"pairing/request/{offer_id}")
+            if request_data != {"action": "pair", "offer_id": offer_id}:
+                raise ValueError
+        except (ValueError, KeyError, TypeError):
+            return self._response({"error": "invalid encrypted pairing request"}, status=401)
+        self.offers.pop(offer_id)
+        response = seal(
+            {"schema_version": 1, **offer.configuration},
+            offer.key,
+            f"pairing/response/{offer_id}/{payload['envelope']['id']}/200",
+        )
+        return self._response(response, status=200)
 
     def _expire(self, now: float) -> None:
         self.offers = {

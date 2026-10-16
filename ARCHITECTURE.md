@@ -45,15 +45,18 @@ iPhone camera (foreground, black overlay, wake lock)
 local recognition API ──► detection/OCR ──► 3-frame confirmation
        │ confirmed result
        ▼
-iPhone ──► HTTPS + HMAC/replay protection ──► Home Assistant webhook
+iPhone ──► local HTTP(S) + AES-GCM/replay protection ──► HA webhook
                                                     │
                        registered-plate match ──────┼─ event entity
                        recently-seen timeout ───────└─ binary sensor
 ```
 
 The iPhone never receives a Home Assistant administrator token. The recognition API does not manage
-registered plates; that policy remains in Home Assistant. HMAC authenticates the exact webhook body,
-while TLS provides confidentiality. Plate text can still enter Home Assistant's recorder and needs an
+registered plates; that policy remains in Home Assistant. QR-based one-time shared keys bootstrap
+AES-256-GCM/HKDF-SHA256 protection for pairing, configuration and events even on local HTTP.
+Responses bind the request and status; server-session IDs prevent recorded observations crossing
+HA restarts. The frame API remains HTTPS. See [the wire specification](docs/ENCRYPTED_TRANSPORT.md).
+Plate text can still enter Home Assistant's recorder and needs an
 appropriate retention policy.
 
 The current timeout means “not seen by this camera recently,” not “has left the garage.” Reliable

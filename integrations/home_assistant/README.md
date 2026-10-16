@@ -10,27 +10,28 @@ Install `https://github.com/Ohmanyxa/openplate` as a HACS custom repository of c
 Home Assistant's `/config/custom_components/`. Restart Home Assistant, then add **OpenPlate** under
 **Settings → Devices & services**.
 
-Initial setup displays the QR immediately if Home Assistant has a configured HTTPS URL. Otherwise,
-enter only the Home Assistant HTTPS base URL reachable from the iPhone. Device identity and keys are
+Initial setup detects the local HA URL, including `http://homeassistant.local:8123` or a private IP,
+and displays the QR immediately. If detection fails, confirm or correct the suggested local address.
+No HTTPS setup or certificates are needed for this Home Assistant connection. Device identity and keys are
 generated automatically. In the iPhone app, tap the pairing button and scan the code, then confirm
 the QR screen in Home Assistant. No recognition server settings or registered plates are needed to pair.
 
 After pairing, select **Configure → Configure recognition server** to enter the running recognition
 server HTTPS URL, its API key and the capture interval. The integration does not start this server itself.
-The open app retrieves settings automatically within about 15 seconds using signed HTTPS requests;
+The open app retrieves settings automatically within about 15 seconds using encrypted requests;
 another QR scan is unnecessary. Until then, it shows that it is paired but waiting for recognition setup.
 Configure registered plates separately, one per line as `BAB123=Family car`. Adjust the not-seen timeout
 under advanced settings.
 
-The QR contains a random 256-bit one-time token, the HTTPS pairing endpoint and an expiry time.
-It contains no permanent credentials. Home Assistant consumes the token on its first successful
-exchange and sends the configuration with cache prevention headers. Treat the QR as sensitive while
-it is valid. The iPhone stores the recognition API key and signing key in iOS Keychain. Home Assistant
+The QR contains an offer ID, a temporary random 256-bit encryption key, the pairing endpoint and expiry.
+It contains no permanent credentials. The temporary key is never sent over the network. Home Assistant
+consumes the offer on its first successfully authenticated exchange; invalid requests do not consume it.
+Treat the QR as sensitive while valid. The iPhone stores the recognition API key and device key in iOS Keychain. Home Assistant
 stores configuration in its normal configuration-entry storage; protect the host and its backups.
-Both HTTPS certificates must be trusted by the iPhone, including when using a local certificate authority.
+The separate recognition server still needs a TLS certificate trusted by the iPhone for camera frames.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
-contains dedicated screens for registered plates, recognition, iPhone pairing and the not-seen timeout. Starting a
+contains dedicated screens for registered plates, recognition, HA address, iPhone pairing and timeout. Starting a
 new pairing generates a new signing key; scan the code before confirming it because the previous app
 key stops working after confirmation.
 
@@ -74,9 +75,17 @@ protection. Directional line crossing is planned but not present in this increme
 
 ## Transport
 
-The app sends JSON through HTTPS and signs the exact request with HMAC-SHA256. Home Assistant rejects
-old timestamps, modified bodies and reused nonces. TLS must terminate at Home Assistant or a trusted
-local reverse proxy; plain HTTP is intentionally rejected by the app configuration.
+The app and integration encrypt and authenticate JSON with AES-256-GCM and direction-specific keys
+derived by HKDF-SHA256. Replies are bound to the request and HTTP status. Modified data, stale messages,
+replays and plaintext success replies are rejected. A fresh session on each HA entry setup prevents
+recorded plate requests from being replayed after reload/restart; the app refreshes sessions automatically.
+Public HTTP hosts are rejected; use local names, private IPs or HTTPS. The iOS app enables local-network
+access without globally disabling transport security. See [the wire specification](../../docs/ENCRYPTED_TRANSPORT.md).
+
+Update both components to v0.5.0 or later and pair again to rotate the key and disable legacy plaintext
+HMAC requests. Existing HTTPS entries temporarily retain the legacy path for old clients; local HTTP
+never accepts it. The HA browser interface itself is outside the encrypted OpenPlate channel: display
+the QR from a trusted HA interface. The protocol has not received an independent security audit.
 
 ## Pairing regression tests
 
@@ -86,3 +95,18 @@ These tests exercise the one-time gateway and form selectors against Home Assist
 PYTHONPATH=. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
   python -m unittest discover -s integrations/home_assistant/tests -v
 ```
+
+For a real Dart/Python HTTP round trip, run the localhost-only test harness in one terminal:
+
+```bash
+PYTHONPATH=. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+  python integrations/home_assistant/tests/interop_server.py
+```
+
+Use its printed URL in another terminal, from `apps/openplate_mobile`:
+
+```bash
+OPENPLATE_INTEROP_URL=http://127.0.0.1:PORT flutter test test/http_interop_test.dart
+```
+
+The harness exposes test-only bootstrap/state routes on loopback and is not part of the installed integration.

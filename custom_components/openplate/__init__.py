@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import secrets
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,12 +24,14 @@ from .const import (
     CONF_DEVICE_ID,
     CONF_PLATES,
     CONF_SECRET,
+    CONF_TRANSPORT_VERSION,
     CONF_WEBHOOK_ID,
     DOMAIN,
     MAX_BODY_BYTES,
     PLATFORMS,
     SIGNATURE_MAX_AGE_SECONDS,
 )
+from .encryption import seal, unseal
 from .pairing_webhook import async_ensure_pairing_gateway
 from .security import valid_signature
 
@@ -68,6 +71,8 @@ class OpenPlateManager:
         self.last_event: dict[str, Any] | None = None
         self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
         self._nonces: dict[str, float] = {}
+        self._session_id = secrets.token_urlsafe(24)
+        self._event_ids: dict[str, float] = {}
 
     def subscribe(self, listener: Callable[[str, dict[str, Any]], None]) -> Callable[[], None]:
         self._listeners.append(listener)
@@ -86,6 +91,18 @@ class OpenPlateManager:
         body = await request.read()
         if len(body) > MAX_BODY_BYTES:
             return web.json_response({"error": "payload too large"}, status=413)
+        try:
+            envelope = json.loads(body)
+        except (ValueError, UnicodeError):
+            return web.json_response({"error": "invalid payload"}, status=400)
+        if isinstance(envelope, dict) and envelope.get("version") == 2:
+            return self._handle_encrypted(envelope)
+        # Legacy plaintext is accepted only for existing HTTPS configurations.
+        # Re-pairing permanently opts an entry into encrypted-only transport.
+        if self.config.get(CONF_TRANSPORT_VERSION, 1) != 1 or not self.config.get(
+            "home_assistant_url", ""
+        ).startswith("https://"):
+            return web.json_response({"error": "encrypted transport required"}, status=426)
         timestamp = request.headers.get("X-OpenPlate-Timestamp", "")
         nonce = request.headers.get("X-OpenPlate-Nonce", "")
         signature = request.headers.get("X-OpenPlate-Signature", "")
@@ -121,6 +138,57 @@ class OpenPlateManager:
             return web.json_response({"error": "invalid payload"}, status=400)
         self.process_observation(payload, now)
         return web.json_response({"accepted": True})
+
+    def _handle_encrypted(self, envelope: dict[str, Any]) -> web.Response:
+        webhook_id = self.config[CONF_WEBHOOK_ID]
+        secret = self.config[CONF_SECRET]
+        now = time.time()
+        try:
+            payload = unseal(envelope, secret, f"device/request/{webhook_id}", now=now)
+        except ValueError:
+            return web.json_response({"error": "invalid encrypted request"}, status=401)
+        message_id = envelope["id"]
+
+        def respond(data: dict[str, Any], status: int = 200) -> web.Response:
+            return web.json_response(
+                seal(data, secret, f"device/response/{webhook_id}/{message_id}/{status}"),
+                status=status,
+                headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+            )
+
+        self._expire_nonces(now)
+        replay_id = f"v2:{message_id}"
+        if replay_id in self._nonces:
+            return respond({"error": "replayed request"}, 409)
+        self._nonces[replay_id] = now
+        if (
+            payload.get("schema_version") != 1
+            or payload.get("device_id") != self.config[CONF_DEVICE_ID]
+        ):
+            return respond({"error": "invalid device"}, 400)
+        if payload.get("event_type") == "device.configuration":
+            return respond(
+                {
+                    "schema_version": 1,
+                    **mobile_configuration(self.config),
+                    "session_id": self._session_id,
+                }
+            )
+        # Fresh server sessions make recorded plate messages unusable after a reload/restart.
+        if payload.get("session_id") != self._session_id:
+            return respond({"error": "session required"}, 428)
+        try:
+            self._validate_payload(payload)
+        except (KeyError, TypeError, ValueError):
+            return respond({"error": "invalid payload"}, 400)
+        event_id = payload["event_id"]
+        if event_id in self._event_ids:
+            return respond({"accepted": True, "duplicate": True})
+        self._event_ids[event_id] = now
+        self.process_observation(
+            {key: value for key, value in payload.items() if key != "session_id"}, now
+        )
+        return respond({"accepted": True})
 
     def _validate_payload(self, payload: dict[str, Any]) -> None:
         if payload["schema_version"] != 1 or payload["event_type"] != "plate.observed":
@@ -176,6 +244,7 @@ class OpenPlateManager:
     def _expire_nonces(self, now: float) -> None:
         cutoff = now - SIGNATURE_MAX_AGE_SECONDS
         self._nonces = {nonce: seen for nonce, seen in self._nonces.items() if seen >= cutoff}
+        self._event_ids = {key: seen for key, seen in self._event_ids.items() if seen >= cutoff}
 
 
 async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
@@ -205,8 +274,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate entries created before the guided pairing flow."""
-    if entry.version < 3:
-        hass.config_entries.async_update_entry(entry, version=3)
+    if entry.version < 4:
+        hass.config_entries.async_update_entry(entry, version=4)
     return True
 
 

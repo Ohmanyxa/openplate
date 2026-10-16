@@ -29,6 +29,12 @@ void main() {
       expect(settings('').homeAssistantBaseUrl, isNull);
       expect(
         settings(
+          'http://homeassistant.local:8123/api/webhook/private-token',
+        ).homeAssistantBaseUrl,
+        'http://homeassistant.local:8123',
+      );
+      expect(
+        settings(
           'https://user:password@ha.local/api/webhook/token',
         ).homeAssistantBaseUrl,
         isNull,
@@ -41,6 +47,7 @@ void main() {
     (tester) async {
       await tester.pumpWidget(const MaterialApp(home: SetupHelpScreen()));
       expect(find.textContaining('Vor der ersten Kopplung'), findsOneWidget);
+      expect(find.text('http://homeassistant.local:8123'), findsOneWidget);
       expect(find.text('Adresse kopieren'), findsNothing);
     },
   );

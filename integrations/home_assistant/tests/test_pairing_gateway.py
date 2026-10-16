@@ -6,8 +6,11 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
+from homeassistant.helpers.network import NoURLAvailableError
+
 from custom_components.openplate import OpenPlateManager
 from custom_components.openplate.config_flow import OpenPlateConfigFlow, _qr_schema, _setup_schema
+from custom_components.openplate.encryption import seal, unseal
 from custom_components.openplate.pairing_webhook import PairingGateway
 from custom_components.openplate.security import signature_for
 
@@ -23,28 +26,49 @@ class PairingGatewayTests(unittest.IsolatedAsyncioTestCase):
     async def test_credentials_are_returned_only_once(self):
         gateway = PairingGateway()
         configuration = {"webhook_secret": "private", "recognition_api_key": "api-key"}
-        token, _ = gateway.create_offer(configuration, lifetime_seconds=600)
+        offer_id, key, _ = gateway.create_offer(configuration, lifetime_seconds=600)
         configuration["webhook_secret"] = "changed"
-        response = await self.request(gateway, {"token": token})
+        envelope = seal(
+            {"action": "pair", "offer_id": offer_id}, key, f"pairing/request/{offer_id}"
+        )
+        body = {"offer_id": offer_id, "envelope": envelope}
+        response = await self.request(gateway, body)
         self.assertEqual(response.status, 200)
-        self.assertEqual(json.loads(response.body)["webhook_secret"], "private")
+        self.assertNotIn("private", response.text)
+        self.assertNotIn("api-key", response.text)
+        configuration = unseal(
+            json.loads(response.body), key, f"pairing/response/{offer_id}/{envelope['id']}/200"
+        )
+        self.assertEqual(configuration["webhook_secret"], "private")
         self.assertEqual(response.headers["Cache-Control"], "no-store")
-        self.assertEqual((await self.request(gateway, {"token": token})).status, 401)
+        self.assertEqual((await self.request(gateway, body)).status, 401)
 
     async def test_expired_and_unknown_tokens_are_rejected(self):
         gateway = PairingGateway()
         with patch("custom_components.openplate.pairing_webhook.time.time", return_value=1000):
-            token, _ = gateway.create_offer({}, lifetime_seconds=600)
+            offer_id, _key, _ = gateway.create_offer({}, lifetime_seconds=600)
         with patch("custom_components.openplate.pairing_webhook.time.time", return_value=1600):
-            self.assertEqual((await self.request(gateway, {"token": token})).status, 401)
-        self.assertEqual((await self.request(gateway, {"token": "unknown"})).status, 401)
+            self.assertEqual((await self.request(gateway, {"offer_id": offer_id})).status, 401)
+        self.assertEqual((await self.request(gateway, {"offer_id": "unknown"})).status, 401)
 
     async def test_malformed_requests_do_not_consume_offer(self):
         gateway = PairingGateway()
         gateway.create_offer({}, lifetime_seconds=600)
-        for payload in ({}, [], {"token": 123}):
+        for payload in ({}, [], {"offer_id": 123}):
             self.assertEqual((await self.request(gateway, payload)).status, 400)
         self.assertEqual(len(gateway.offers), 1)
+
+    async def test_invalid_ciphertext_does_not_consume_offer(self):
+        gateway = PairingGateway()
+        offer_id, key, _ = gateway.create_offer({}, lifetime_seconds=600)
+        envelope = seal(
+            {"action": "pair", "offer_id": offer_id}, "wrong" * 8, f"pairing/request/{offer_id}"
+        )
+        self.assertEqual(
+            (await self.request(gateway, {"offer_id": offer_id, "envelope": envelope})).status, 401
+        )
+        self.assertIn(offer_id, gateway.offers)
+        self.assertNotIn(key, json.dumps(envelope))
 
     def test_current_home_assistant_accepts_form_selectors(self):
         self.assertIsNotNone(_setup_schema())
@@ -77,13 +101,36 @@ class PairingFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(created["type"], "create_entry")
 
     async def test_only_ha_url_is_requested_if_unknown(self):
-        result = await self.flow().async_step_user()
+        with patch(
+            "custom_components.openplate.config_flow.get_url", side_effect=NoURLAvailableError
+        ):
+            result = await self.flow().async_step_user()
         self.assertEqual(result["step_id"], "user")
         self.assertEqual({str(key) for key in result["data_schema"].schema}, {"home_assistant_url"})
 
-    async def test_http_does_not_generate_pairing_code(self):
-        result = await self.flow().async_step_user({"home_assistant_url": "http://ha.local"})
-        self.assertEqual(result["errors"], {"home_assistant_url": "https_required"})
+    async def test_local_http_generates_qr_without_tls(self):
+        with patch(
+            "custom_components.openplate.config_flow._create_pairing_uri",
+            return_value="openplate://pair?version=2",
+        ):
+            result = await self.flow().async_step_user(
+                {"home_assistant_url": "http://homeassistant.local:8123"}
+            )
+        self.assertEqual(result["step_id"], "pairing_qr")
+
+    async def test_auto_detects_local_address_when_not_configured(self):
+        with (
+            patch(
+                "custom_components.openplate.config_flow.get_url",
+                return_value="http://192.168.1.5:8123",
+            ),
+            patch(
+                "custom_components.openplate.config_flow._create_pairing_uri",
+                return_value="openplate://pair?version=2",
+            ),
+        ):
+            result = await self.flow().async_step_user()
+        self.assertEqual(result["step_id"], "pairing_qr")
 
 
 class ConfigurationRefreshTests(unittest.IsolatedAsyncioTestCase):

@@ -12,11 +12,11 @@ from .const import (
     CONF_WEBHOOK_ID,
     DEFAULT_CAPTURE_INTERVAL,
 )
-from .pairing import normalize_https_base_url
+from .pairing import normalize_base_url
 
 
 def mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
-    base_url = normalize_https_base_url(configuration[CONF_HOME_ASSISTANT_URL])
+    base_url = normalize_base_url(configuration[CONF_HOME_ASSISTANT_URL])
     return {
         "device_id": configuration[CONF_DEVICE_ID],
         "recognition_url": configuration.get(CONF_RECOGNITION_URL, ""),

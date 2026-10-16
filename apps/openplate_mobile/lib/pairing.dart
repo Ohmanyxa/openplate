@@ -4,15 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import 'connection_url.dart';
+import 'encryption.dart';
+
 class OpenPlatePairingRequest {
   const OpenPlatePairingRequest({
     required this.pairingUrl,
-    required this.token,
+    required this.offerId,
+    required this.key,
     required this.expiresAt,
   });
 
   final Uri pairingUrl;
-  final String token;
+  final String offerId;
+  final String key;
   final DateTime expiresAt;
 
   factory OpenPlatePairingRequest.parse(String raw, {DateTime? now}) {
@@ -22,15 +27,18 @@ class OpenPlatePairingRequest {
     }
     final values = uri.queryParameters;
     final pairingUrl = Uri.tryParse(values['pairing_url'] ?? '');
-    final token = values['token'] ?? '';
+    final offerId = values['offer_id'] ?? '';
+    final key = values['key'] ?? '';
     final expiresSeconds = int.tryParse(values['expires_at'] ?? '');
-    if (values['version'] != '1') {
-      throw const FormatException('Nicht unterstützte Code-Version');
+    if (values['version'] != '2') {
+      throw const FormatException(
+        'Bitte einen neuen QR-Code in Home Assistant erstellen',
+      );
     }
     if (pairingUrl == null ||
-        pairingUrl.scheme != 'https' ||
-        pairingUrl.host.isEmpty ||
-        token.length < 32 ||
+        !isHomeAssistantUrl(pairingUrl) ||
+        !RegExp(r'^[A-Za-z0-9_-]{16,64}$').hasMatch(offerId) ||
+        !RegExp(r'^[A-Za-z0-9_-]{32,128}$').hasMatch(key) ||
         expiresSeconds == null) {
       throw const FormatException(
         'Unvollständiger oder unsicherer Kopplungscode',
@@ -45,7 +53,8 @@ class OpenPlatePairingRequest {
     }
     return OpenPlatePairingRequest(
       pairingUrl: pairingUrl,
-      token: token,
+      offerId: offerId,
+      key: key,
       expiresAt: expiresAt,
     );
   }
@@ -53,16 +62,27 @@ class OpenPlatePairingRequest {
   Future<OpenPlatePairingConfiguration> exchange({http.Client? client}) async {
     final ownedClient = client ?? http.Client();
     try {
-      final response = await ownedClient
-          .post(
-            pairingUrl,
-            headers: const {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({'token': token}),
-          )
+      if (!isHomeAssistantUrl(pairingUrl)) {
+        throw const FormatException('Ungültige Home-Assistant-Adresse');
+      }
+      if (!expiresAt.isAfter(DateTime.now().toUtc())) {
+        throw const FormatException('Der Kopplungscode ist abgelaufen');
+      }
+      final envelope = await EncryptedTransport.seal(
+        {'action': 'pair', 'offer_id': offerId},
+        key,
+        'pairing/request/$offerId',
+      );
+      final request = http.Request('POST', pairingUrl)
+        ..followRedirects = false
+        ..headers['Content-Type'] = 'application/json'
+        ..body = jsonEncode({'offer_id': offerId, 'envelope': envelope});
+      final streamed = await ownedClient
+          .send(request)
           .timeout(const Duration(seconds: 15));
+      final response = await http.Response.fromStream(
+        streamed,
+      ).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) {
         throw FormatException(
           response.statusCode == 401
@@ -70,10 +90,11 @@ class OpenPlatePairingRequest {
               : 'Home Assistant antwortet mit ${response.statusCode}',
         );
       }
-      final payload = jsonDecode(response.body);
-      if (payload is! Map<String, dynamic>) {
-        throw const FormatException('Ungültige Home-Assistant-Antwort');
-      }
+      final payload = await EncryptedTransport.unseal(
+        jsonDecode(response.body),
+        key,
+        'pairing/response/$offerId/${envelope['id']}/200',
+      );
       return OpenPlatePairingConfiguration.fromJson(payload);
     } finally {
       if (client == null) ownedClient.close();
@@ -116,8 +137,7 @@ class OpenPlatePairingConfiguration {
                 recognitionUrl.host.isNotEmpty &&
                 apiKey.isNotEmpty)) ||
         webhookUrl == null ||
-        webhookUrl.scheme != 'https' ||
-        webhookUrl.host.isEmpty ||
+        !isHomeAssistantUrl(webhookUrl) ||
         deviceId.isEmpty ||
         secret.length < 32 ||
         interval is! int ||

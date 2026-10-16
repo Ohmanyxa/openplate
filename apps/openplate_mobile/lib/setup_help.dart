@@ -21,7 +21,8 @@ class SetupHelpScreen extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(
             'Das Feld in Home Assistant meint die Adresse deiner Home-Assistant-Installation. '
-            'Die IP-Adresse dieses iPhones musst du dafür nicht heraussuchen.',
+            'Die IP-Adresse dieses iPhones musst du dafür nicht heraussuchen. '
+            'OpenPlate ermittelt die lokale Home-Assistant-Adresse normalerweise automatisch.',
           ),
           const SizedBox(height: 20),
           Card(
@@ -53,9 +54,21 @@ class SetupHelpScreen extends StatelessWidget {
                       label: const Text('Adresse kopieren'),
                     ),
                   ] else
-                    const Text(
-                      'Vor der ersten Kopplung kennt die App deine Home-Assistant-Adresse '
-                      'noch nicht. Du findest sie dort, wo du Home Assistant im Browser öffnest.',
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Vor der ersten Kopplung ist deine Adresse hier noch nicht bestätigt. '
+                          'Die übliche lokale Adresse lautet:',
+                        ),
+                        SizedBox(height: 8),
+                        SelectableText('http://homeassistant.local:8123'),
+                        SizedBox(height: 8),
+                        Text(
+                          'Dieser Vorschlag ist nicht überprüft. Bei einem anderen Namen '
+                          'oder Netzwerk kann die Adresse abweichen.',
+                        ),
+                      ],
                     ),
                 ],
               ),
@@ -69,11 +82,11 @@ class SetupHelpScreen extends StatelessWidget {
           const SizedBox(height: 12),
           const Text(
             '1. Öffne Home Assistant im Browser auf einem anderen Gerät.\n\n'
-            '2. Nutze die Adresse aus der Adresszeile: https://, den Namen oder die IP '
+            '2. Nutze die Adresse aus der Adresszeile: http:// oder https://, den Namen oder die IP '
             'und gegebenenfalls den Port. Entferne die Seitenadresse dahinter, '
             'zum Beispiel /config/integrations.\n\n'
             '3. Trage diese Adresse bei OpenPlate in Home Assistant ein. '
-            'Wenn Home Assistant seine HTTPS-Adresse bereits kennt, erscheint der QR-Code direkt.\n\n'
+            'Normalerweise wird sie automatisch ermittelt und der QR-Code erscheint direkt.\n\n'
             '4. Tippe auf dem iPhone auf „iPhone per QR-Code koppeln“, scanne den Code '
             'und bestätige danach in Home Assistant mit „Absenden“.',
           ),
@@ -84,15 +97,16 @@ class SetupHelpScreen extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Dann ist für diese Adresse noch keine verschlüsselte Verbindung eingerichtet. '
-            'HTTPS muss zuerst für Home Assistant eingerichtet sein, mit einem Zertifikat, '
-            'dem das iPhone vertraut. Nur http:// durch https:// zu ersetzen reicht nicht. '
-            'Die Einrichtung kann Unterstützung durch die Person erfordern, die Home Assistant betreut.',
+            'Das ist im Heimnetz in Ordnung. OpenPlate verschlüsselt die Kopplung, '
+            'Einstellungen und Kennzeichenmeldungen selbst. Der QR-Code stellt die sichere '
+            'Verbindung her; für Home Assistant musst du dafür keine Zertifikate einrichten. '
+            'Teile den QR-Code nicht mit anderen.',
           ),
           const SizedBox(height: 20),
           const Text(
             'Der Erkennungsserver wird anschließend separat in Home Assistant eingerichtet. '
-            'Seine Adresse brauchst du zum Koppeln des iPhones noch nicht.',
+            'Seine Adresse brauchst du zum Koppeln des iPhones noch nicht. Die Verbindung '
+            'zum Erkennungsserver benötigt weiterhin HTTPS, weil darüber die Kamerabilder laufen.',
           ),
         ],
       ),
