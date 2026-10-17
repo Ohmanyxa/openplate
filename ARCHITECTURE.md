@@ -40,10 +40,15 @@ application boundary and will not be required for inference.
 
 ```text
 iPhone camera (foreground, black overlay, wake lock)
-       │ JPEG over HTTPS + API key
+       │ continuous raw BGRA video frames, in device memory only
        ▼
-local recognition API ──► detection/OCR ──► 3-frame confirmation
-       │ confirmed result
+frame admission gate ──► serial native iOS inference worker
+       ▼
+local ONNX Runtime CPU ──► YOLO detection ──► high-resolution crop ──► CCT OCR
+       │ decoded strings, still on device
+       ▼
+local 3-frame / 4-second confirmation (minimum OCR confidence 0.8)
+       │ confirmed plate string + metadata only
        ▼
 iPhone ──► local HTTP(S) + AES-GCM/replay protection ──► HA webhook
                                                     │
@@ -51,16 +56,32 @@ iPhone ──► local HTTP(S) + AES-GCM/replay protection ──► HA webhook
                        recently-seen timeout ───────└─ binary sensor
 ```
 
-The iPhone never receives a Home Assistant administrator token. The recognition API does not manage
-registered plates; that policy remains in Home Assistant. QR-based one-time shared keys bootstrap
+The app uses the camera image stream, not periodic still-photo capture. The processing interval
+limits admission of video frames, not camera acquisition. Only one frame is processed at a time;
+frames arriving while busy are skipped rather than queued. No JPEG encoding, photo files or image
+uploads exist in the mobile path. Native preview and black display mode are independent of recognition.
+The pinned upstream model artifacts are downloaded once over HTTPS, SHA-256 verified, and cached in
+Application Support (excluded from backups). Subsequent inference works offline. ONNX Runtime 1.30.0
+executes locally on the iPhone CPU with two intra-op threads; Core ML/Neural Engine acceleration has
+not been enabled or measured. Android local inference is not implemented. iOS 15.1+ is required.
+
+The iPhone never receives a Home Assistant administrator token. Registered-plate policy remains in
+Home Assistant; the Pi runs no model. QR-based one-time shared keys bootstrap
 AES-256-GCM/HKDF-SHA256 protection for pairing, configuration and events even on local HTTP.
 Responses bind the request and status; server-session IDs prevent recorded observations crossing
-HA restarts. The frame API remains HTTPS. See [the wire specification](docs/ENCRYPTED_TRANSPORT.md).
+HA restarts. HA accepts only observation fields, never images. Continued confirmed observations
+refresh HA presence. Sending runs separately from inference; pending observations are coalesced per
+plate and expire after ten seconds so reconnecting does not replay old arrivals.
+See [the wire specification](docs/ENCRYPTED_TRANSPORT.md).
 Plate text can still enter Home Assistant's recorder and needs an
 appropriate retention policy.
 
 The current timeout means “not seen by this camera recently,” not “has left the garage.” Reliable
 arrival/departure needs calibrated line-crossing direction or another garage occupancy sensor.
+
+Device-key authentication proves possession of the paired key, not physical camera provenance. A
+compromised paired phone/key or a printed/copied plate can still produce an observation. Attestation
+and additional access-control factors are future work, not guarantees of the encrypted transport.
 
 ## Memory behavior
 

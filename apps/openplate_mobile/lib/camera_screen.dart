@@ -8,19 +8,23 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'openplate_api.dart';
 import 'settings.dart';
+import 'video_frame.dart';
+import 'local_recognition.dart';
 
-/// Camera preview is local; frame uploads require an explicit recognition start.
+/// Frames never leave the device. Only confirmed strings go to paired HA.
 class CameraScreen extends StatefulWidget {
   const CameraScreen({
     required this.cameras,
     required this.settings,
     this.apiFactory,
+    this.recognizer,
     super.key,
   });
 
   final List<CameraDescription> cameras;
   final OpenPlateSettings settings;
   final OpenPlateApi Function(OpenPlateSettings)? apiFactory;
+  final LocalPlateRecognizer? recognizer;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -30,14 +34,21 @@ class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
   Future<void> _cameraTask = Future.value();
-  Future<XFile>? _shutter;
   int _generation = 0;
+  int _processingEpoch = 0;
   late OpenPlateSettings _settings = widget.settings;
   late OpenPlateApi _api = _createApi(_settings);
+  late final LocalPlateRecognizer _local =
+      widget.recognizer ?? LocalPlateRecognizer();
+  final _confirmation = LocalTemporalConfirmation();
+  bool _startingRecognition = false;
+  bool _modelsReady = false;
+  bool _sendingEvents = false;
 
   OpenPlateApi _createApi(OpenPlateSettings settings) =>
       widget.apiFactory?.call(settings) ?? OpenPlateApi(settings);
-  Timer? _captureTimer;
+  final Stopwatch _videoClock = Stopwatch()..start();
+  Duration? _lastFrame;
   Timer? _configurationTimer;
   Timer? _hideControlsTimer;
   bool _foreground = true;
@@ -51,6 +62,7 @@ class _CameraScreenState extends State<CameraScreen>
   String _recognitionStatus = 'Erkennung ausgeschaltet';
   String _haStatus = 'Home Assistant noch nicht geprüft';
   String? _lastPlate;
+  String? _rawReading;
   int _droppedEvents = 0;
   final List<PendingPlateEvent> _pendingEvents = [];
 
@@ -83,21 +95,22 @@ class _CameraScreenState extends State<CameraScreen>
 
   void _queueCamera(bool open) {
     final generation = ++_generation;
-    _captureTimer?.cancel();
+    _processingEpoch++;
+    _confirmation.reset();
+    _pendingEvents.clear();
+    _lastFrame = null;
     _cameraTask = _cameraTask.then((_) async {
       final previous = _controller;
       _controller = null;
       if (mounted) setState(() {});
       try {
-        final shutter = _shutter;
-        if (shutter != null) {
-          try {
-            await shutter.timeout(const Duration(seconds: 3));
-          } on Object {
-            // A suspended camera may abort a pending shutter operation.
+        try {
+          if (previous?.value.isStreamingImages ?? false) {
+            await previous!.stopImageStream();
           }
+        } finally {
+          await previous?.dispose();
         }
-        await previous?.dispose();
         if (!open || !mounted || generation != _generation) return;
         if (widget.cameras.isEmpty) {
           setState(() {
@@ -116,8 +129,11 @@ class _CameraScreenState extends State<CameraScreen>
         final controller = CameraController(
           backs.isEmpty ? widget.cameras.first : backs.first,
           ResolutionPreset.high,
+          fps: 10,
           enableAudio: false,
-          imageFormatGroup: ImageFormatGroup.jpeg,
+          imageFormatGroup: Platform.isIOS
+              ? ImageFormatGroup.bgra8888
+              : ImageFormatGroup.yuv420,
         );
         try {
           await controller.initialize();
@@ -133,7 +149,7 @@ class _CameraScreenState extends State<CameraScreen>
           _controller = controller;
           _cameraStatus = 'Kamera aktiv';
         });
-        _scheduleCaptures();
+        await controller.startImageStream(_onVideoFrame);
       } on Object catch (error) {
         if (mounted && generation == _generation) {
           setState(() {
@@ -169,7 +185,7 @@ class _CameraScreenState extends State<CameraScreen>
           _recognizing = false;
           _recognitionStatus = 'Erkennung ausgeschaltet';
         }
-        _scheduleCaptures();
+        _resetFrameAdmission();
       }
       setState(() => _haStatus = 'Home Assistant verbunden');
     } on Object {
@@ -184,33 +200,70 @@ class _CameraScreenState extends State<CameraScreen>
     }
   }
 
-  void _scheduleCaptures() {
-    _captureTimer?.cancel();
-    if (!_recognizing ||
-        !_foreground ||
-        !_settings.isComplete ||
-        _controller == null) {
-      return;
-    }
-    unawaited(_capture());
-    _captureTimer = Timer.periodic(
-      Duration(seconds: _settings.captureIntervalSeconds),
-      (_) => _capture(),
-    );
+  void _resetFrameAdmission() {
+    _processingEpoch++;
+    _confirmation.reset();
+    _pendingEvents.clear();
+    _lastFrame = null;
   }
 
-  void _toggleRecognition() {
-    if (!_settings.isComplete || _controller == null) return;
+  void _onVideoFrame(CameraImage image) {
+    if (_busy || !_recognizing || !_foreground || !_settings.isComplete) return;
+    final now = _videoClock.elapsed;
+    if (_lastFrame != null &&
+        now - _lastFrame! <
+            Duration(seconds: _settings.captureIntervalSeconds)) {
+      return;
+    }
+    _lastFrame = now;
+    unawaited(_processFrame(VideoFrame(image)));
+  }
+
+  Future<void> _toggleRecognition() async {
+    if (!_settings.isComplete || _controller == null || _startingRecognition) {
+      return;
+    }
+    if (!_recognizing && !_modelsReady) {
+      setState(() {
+        _startingRecognition = true;
+        _recognitionStatus =
+            'Lokale Modelle werden geladen. Erster Start benötigt Internet (ca. 11 MB).';
+      });
+      try {
+        await _local.initialize();
+        _modelsReady = true;
+      } on Object catch (error) {
+        if (mounted) {
+          setState(() {
+            _startingRecognition = false;
+            _recognitionStatus = error is PlatformException
+                ? error.message ??
+                      'Lokale Modelle konnten nicht gestartet werden'
+                : 'Lokale Erkennung nicht verfügbar. iOS-App verwenden und Modell-Download prüfen.';
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
+      _startingRecognition = false;
+      if (!_foreground || _controller == null) {
+        setState(
+          () =>
+              _recognitionStatus = 'Lokale Modelle bereit · Erkennung starten',
+        );
+        return;
+      }
+    }
     setState(() {
       _recognizing = !_recognizing;
       _recognitionStatus = _recognizing
-          ? 'Erkennung aktiv'
+          ? 'Lokale Erkennung aktiv · ONNX Runtime / iPhone CPU'
           : 'Erkennung ausgeschaltet';
     });
-    _scheduleCaptures();
+    _resetFrameAdmission();
   }
 
-  Future<void> _capture() async {
+  Future<void> _processFrame(VideoFrame frame) async {
     final controller = _controller;
     if (_busy ||
         !_recognizing ||
@@ -221,37 +274,24 @@ class _CameraScreenState extends State<CameraScreen>
     }
     _busy = true;
     final generation = _generation;
-    XFile? picture;
+    final epoch = _processingEpoch;
     try {
-      final shutter = controller.takePicture();
-      _shutter = shutter;
-      try {
-        picture = await shutter;
-      } finally {
-        if (identical(_shutter, shutter)) _shutter = null;
-      }
+      final readings = await _local.recognize(frame);
       if (!mounted ||
           !_recognizing ||
           !_foreground ||
+          epoch != _processingEpoch ||
           generation != _generation) {
         return;
       }
       final api = _api;
-      await _flushPending(api);
-      if (!mounted ||
-          !_recognizing ||
-          !_foreground ||
-          generation != _generation) {
-        return;
-      }
-      final result = await api.recognize(picture.path);
-      if (!mounted ||
-          !_recognizing ||
-          !_foreground ||
-          generation != _generation) {
-        return;
-      }
-      for (final plate in result.where((plate) => plate.newEvent)) {
+      _rawReading = readings.isEmpty
+          ? null
+          : '${readings.first.plate} (${(readings.first.confidence * 100).toStringAsFixed(0)} %)';
+      final result = _confirmation.update(readings, _videoClock.elapsed);
+      for (final plate in result) {
+        // Coalesce presence refreshes; never replay an outage as a queue of arrivals.
+        _pendingEvents.removeWhere((event) => event.plate.plate == plate.plate);
         // A network outage must not create an unbounded event queue.
         if (_pendingEvents.length >= 100) {
           _pendingEvents.removeAt(0);
@@ -260,11 +300,11 @@ class _CameraScreenState extends State<CameraScreen>
         _pendingEvents.add(PendingPlateEvent.fromPlate(plate));
         _lastPlate = plate.plate;
       }
-      await _flushPending(api);
+      unawaited(_flushPending(api));
       if (mounted && _recognizing && _foreground && generation == _generation) {
         setState(
           () => _recognitionStatus =
-              'Erkennung aktiv · ${result.length} bestätigt · ${_pendingEvents.length} ausstehend'
+              'Lokal · ${readings.length} gelesen · ${result.length} bestätigt · ${_pendingEvents.length} ausstehend'
               '${_droppedEvents > 0 ? ' · $_droppedEvents verworfen' : ''}',
         );
       }
@@ -272,30 +312,35 @@ class _CameraScreenState extends State<CameraScreen>
       if (mounted && _recognizing && _foreground && generation == _generation) {
         setState(
           () => _recognitionStatus =
-              'Erkennung fehlgeschlagen – Serververbindung prüfen',
+              'Lokale Erkennung fehlgeschlagen – Kamera-/Modellformat prüfen',
         );
       }
     } finally {
-      if (picture != null) {
-        try {
-          await File(picture.path).delete();
-        } on FileSystemException {
-          // The OS also clears the camera's temporary files.
-        }
-      }
       _busy = false;
     }
   }
 
   Future<void> _flushPending(OpenPlateApi api) async {
-    for (final event in List<PendingPlateEvent>.of(_pendingEvents)) {
-      if (!mounted || !_recognizing || !_foreground) return;
-      try {
-        await api.sendHomeAssistantEvent(event);
-        _pendingEvents.remove(event);
-      } on Exception {
-        return;
+    if (_sendingEvents) return;
+    _sendingEvents = true;
+    try {
+      for (final event in List<PendingPlateEvent>.of(_pendingEvents)) {
+        if (!mounted || !_recognizing || !_foreground) return;
+        if (DateTime.now().toUtc().difference(event.createdAt) >
+            const Duration(seconds: 10)) {
+          _pendingEvents.remove(event);
+          _droppedEvents++;
+          continue;
+        }
+        try {
+          await api.sendHomeAssistantEvent(event);
+          _pendingEvents.remove(event);
+        } on Exception {
+          return;
+        }
       }
+    } finally {
+      _sendingEvents = false;
     }
   }
 
@@ -404,10 +449,14 @@ class _CameraScreenState extends State<CameraScreen>
                             _settings.isComplete
                                 ? _recognitionStatus
                                 : 'Nur Live-Vorschau · keine Bildübertragung. '
-                                      'Erkennungsserver in Home Assistant unter Konfigurieren einrichten.',
+                                      'Home Assistant per QR-Code koppeln. Die Erkennung läuft lokal.',
                           ),
                           if (_lastPlate != null)
-                            Text('Letztes Kennzeichen: $_lastPlate'),
+                            Text('Zuletzt bestätigt: $_lastPlate'),
+                          if (_rawReading != null)
+                            Text(
+                              'OCR-Rohwert (nicht automatisch bestätigt): $_rawReading',
+                            ),
                           if (_blackMode)
                             const Text(
                               'Bedienung wird nach 8 Sekunden ausgeblendet.',
@@ -429,7 +478,10 @@ class _CameraScreenState extends State<CameraScreen>
                             label: const Text('Kamera erneut starten'),
                           ),
                         FilledButton.icon(
-                          onPressed: _settings.isComplete && controller != null
+                          onPressed:
+                              _settings.isComplete &&
+                                  controller != null &&
+                                  !_startingRecognition
                               ? _toggleRecognition
                               : null,
                           icon: Icon(

@@ -16,19 +16,20 @@ No HTTPS setup or certificates are needed for this Home Assistant connection. De
 generated automatically. In the iPhone app, tap the pairing button and scan the code, then confirm
 the QR screen in Home Assistant. No recognition server settings or registered plates are needed to pair.
 
-After pairing, select **Configure → Configure recognition server** to enter the running recognition
-server HTTPS URL, its API key and the capture interval. The integration does not start this server itself.
-The open app retrieves settings automatically within about 15 seconds using encrypted requests;
-another QR scan is unnecessary. Until then, it shows that it is paired but waiting for recognition setup.
+Detection, OCR and temporal confirmation run locally on the iPhone. HA runs no model; a Pi 5 only
+handles small encrypted observation messages and plate matching. The first recognition start downloads
+hash-pinned models on the phone; subsequent recognition is offline. Under **Configure → On-device
+recognition**, start with a 1-second processing interval. The open app retrieves settings within about
+15 seconds using encrypted requests; another QR scan is unnecessary. Legacy server settings are ignored.
 Configure registered plates separately, one per line as `BAB123=Family car`. Adjust the not-seen timeout
 under advanced settings.
 
 The QR contains an offer ID, a temporary random 256-bit encryption key, the pairing endpoint and expiry.
 It contains no permanent credentials. The temporary key is never sent over the network. Home Assistant
 consumes the offer on its first successfully authenticated exchange; invalid requests do not consume it.
-Treat the QR as sensitive while valid. The iPhone stores the recognition API key and device key in iOS Keychain. Home Assistant
+Treat the QR as sensitive while valid. The iPhone stores the device key in iOS Keychain. Home Assistant
 stores configuration in its normal configuration-entry storage; protect the host and its backups.
-The separate recognition server still needs a TLS certificate trusted by the iPhone for camera frames.
+Camera frames are never sent to HA or a recognition server.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
 contains dedicated screens for registered plates, recognition, HA address, iPhone pairing and timeout. Starting a
@@ -86,6 +87,10 @@ Update both components to v0.5.0 or later and pair again to rotate the key and d
 HMAC requests. Existing HTTPS entries temporarily retain the legacy path for old clients; local HTTP
 never accepts it. The HA browser interface itself is outside the encrypted OpenPlate channel: display
 the QR from a trusted HA interface. The protocol has not received an independent security audit.
+
+Possession of the paired key authenticates observations, not their camera provenance. A compromised
+phone/key or a copied physical plate remains outside that guarantee. A plate match alone must not
+authorize a garage door.
 
 ## Pairing regression tests
 

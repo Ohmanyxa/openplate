@@ -7,8 +7,8 @@ plate crop.
 
 The repository also contains the first mounted-camera vertical slice:
 
-- `apps/openplate_mobile`: Flutter/iOS camera client with local live preview, foreground recognition and switchable black screen.
-- `openplate-server`: authenticated local frame-recognition API with temporal confirmation.
+- `apps/openplate_mobile`: Flutter/iOS client with on-device ONNX detection/OCR, local temporal confirmation, live preview and black mode. Frames never leave the phone.
+- `openplate-server`: optional development/reference API, not used by the iPhone app or required by HA.
 - `custom_components/openplate`: HACS-compatible signed webhook integration and HA entities.
 
 ## Quick start
@@ -22,7 +22,7 @@ uv sync --extra dev --python 3.12
 uv run openplate path/to/image.jpg --cpu-only
 ```
 
-Start the development recognition API with a TLS certificate trusted by the iPhone:
+The optional development/reference API can be started separately (the mobile app does not use it):
 
 ```bash
 export OPENPLATE_API_KEY='replace-with-a-long-random-value'
@@ -30,7 +30,7 @@ uv run openplate-server --host 0.0.0.0 --port 8844 \
   --ssl-certfile /path/to/fullchain.pem --ssl-keyfile /path/to/privkey.pem
 ```
 
-The recognition server requires HTTPS. The Home Assistant connection also supports local HTTP
+The mobile app uses no recognition server. Its Home Assistant connection supports local HTTP
 with application-level authenticated encryption and needs no HA certificates. See
 [the Home Assistant setup guide](integrations/home_assistant/README.md) for the complete flow.
 
@@ -47,10 +47,11 @@ On the iPhone, tap **iPhone per QR-Code koppeln**, scan,
 then confirm the QR screen in Home Assistant. Device identity and keys are generated automatically;
 server settings and registered plates are not required for pairing.
 
-Under **Configure**, manage plates or select **Configure recognition server** to enter the local
-recognition server HTTPS URL and API key. While open, the paired app retrieves these settings
-automatically within about 15 seconds, without another scan. It shows a waiting state until recognition
-is configured. The integration does not install or start the recognition server itself.
+Under **Configure**, manage registered plates or adjust **On-device recognition**. Detection, OCR and
+three-frame confirmation run on the iPhone CPU using ONNX Runtime 1.30.0. The first recognition start
+downloads about 11 MB of hash-verified models; subsequent inference is offline. iOS 15.1+ is required.
+Core ML acceleration is not enabled. No model runs in HA and no image is sent off the phone.
+The paired app retrieves settings automatically within about 15 seconds without another scan.
 
 The iPhone **Kamera öffnen** button always offers local preview, even without a recognition server.
 Start frame processing explicitly with **Erkennung starten**. **Schwarzmodus** hides the app surface
@@ -96,10 +97,11 @@ assessment, [ARCHITECTURE.md](ARCHITECTURE.md) for component boundaries, and
 
 ## Privacy and limitations
 
-The still-image CLI transmits nothing. The mounted-camera client explicitly sends temporary frames to
-the configured local recognition server and confirmed plate events to Home Assistant. A matching plate
-must never by itself authorize a garage door or other security-sensitive action. Native iOS inference,
-ROI calibration, direction detection and Raspberry Pi deployment remain unimplemented.
+The still-image CLI transmits nothing. The mounted-camera client processes frames locally and sends
+only confirmed plate strings and metadata encrypted to Home Assistant. A matching plate
+must never by itself authorize a garage door or other security-sensitive action. Core ML acceleration,
+ROI calibration and direction detection remain unimplemented. Local iOS CPU inference is implemented;
+physical-device German-plate accuracy, temperature and sustained throughput still need measurement.
 
 ## License
 

@@ -44,8 +44,8 @@ class OpenPlateSettings {
       deviceId.isNotEmpty &&
       webhookSecret.length >= 32;
 
-  bool get isComplete =>
-      isPaired && recognitionUrl.startsWith('https://') && apiKey.isNotEmpty;
+  // Recognition runs on the device; legacy server fields are ignored.
+  bool get isComplete => isPaired;
 
   String? get homeAssistantBaseUrl {
     final uri = Uri.tryParse(homeAssistantWebhookUrl);
@@ -128,13 +128,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _secret = TextEditingController(text: widget.initial.webhookSecret);
   }
 
-  String? _httpsUrl(String? value) {
-    final uri = Uri.tryParse(value ?? '');
-    return uri != null && uri.scheme == 'https' && uri.host.isNotEmpty
-        ? null
-        : 'Eine vollständige HTTPS-URL eingeben';
-  }
-
   String? _homeAssistantUrl(String? value) {
     final uri = Uri.tryParse(value ?? '');
     return uri != null && isHomeAssistantUrl(uri)
@@ -215,21 +208,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Divider(),
             ),
-            TextFormField(
-              controller: _recognition,
-              decoration: const InputDecoration(
-                labelText: 'Erkennungsserver',
-                hintText: 'https://openplate.local',
-              ),
-              keyboardType: TextInputType.url,
-              validator: _httpsUrl,
-            ),
-            TextFormField(
-              controller: _apiKey,
-              decoration: const InputDecoration(labelText: 'Server-API-Key'),
-              obscureText: true,
-              validator: (value) =>
-                  (value ?? '').isEmpty ? 'API-Key eingeben' : null,
+            const Text(
+              'Detection und OCR laufen lokal auf dem iPhone. '
+              'Kamerabilder verlassen das Gerät nicht.',
             ),
             TextFormField(
               controller: _webhook,
@@ -258,7 +239,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             TextFormField(
               controller: _interval,
               decoration: const InputDecoration(
-                labelText: 'Aufnahmeintervall (Sekunden)',
+                labelText: 'Frame-Prüfintervall (Sekunden)',
               ),
               keyboardType: TextInputType.number,
               validator: (value) {

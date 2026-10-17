@@ -191,12 +191,30 @@ class OpenPlateManager:
         return respond({"accepted": True})
 
     def _validate_payload(self, payload: dict[str, Any]) -> None:
+        # This endpoint accepts observations, never images, frames or arbitrary blobs.
+        allowed = {
+            "schema_version",
+            "event_type",
+            "device_id",
+            "event_id",
+            "timestamp",
+            "plate",
+            "confidence",
+            "observations",
+            "session_id",
+        }
+        if not isinstance(payload, dict) or set(payload) - allowed:
+            raise ValueError
         if payload["schema_version"] != 1 or payload["event_type"] != "plate.observed":
             raise ValueError
         if payload["device_id"] != self.config[CONF_DEVICE_ID]:
             raise ValueError
         if not isinstance(payload["event_id"], str) or not isinstance(payload["plate"], str):
             raise TypeError
+        if not 1 <= len(payload["event_id"]) <= 128 or not re.fullmatch(
+            r"[A-Za-z0-9 -]{1,16}", payload["plate"]
+        ):
+            raise ValueError
         confidence = float(payload["confidence"])
         observations = int(payload["observations"])
         if not 0 <= confidence <= 1 or observations < 1:

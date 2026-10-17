@@ -72,36 +72,6 @@ class OpenPlateApi {
     return OpenPlateSettings.fromPairing(configuration);
   }
 
-  Future<List<ConfirmedPlate>> recognize(String imagePath) async {
-    final base = Uri.parse(settings.recognitionUrl);
-    if (base.scheme != 'https' ||
-        base.host.isEmpty ||
-        base.userInfo.isNotEmpty ||
-        base.hasQuery ||
-        base.hasFragment) {
-      throw const FormatException('Der Erkennungsserver benötigt HTTPS');
-    }
-    final request =
-        http.MultipartRequest(
-            'POST',
-            Uri.parse('${settings.recognitionUrl}/v1/recognize'),
-          )
-          ..followRedirects = false
-          ..headers['X-OpenPlate-Api-Key'] = settings.apiKey
-          ..fields['device_id'] = settings.deviceId
-          ..files.add(await http.MultipartFile.fromPath('image', imagePath));
-    final streamed = await request.send().timeout(const Duration(seconds: 20));
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 200) {
-      throw HttpException('Erkennungsserver ${response.statusCode}');
-    }
-    final payload = jsonDecode(response.body) as Map<String, dynamic>;
-    return (payload['plates'] as List<dynamic>)
-        .cast<Map<String, dynamic>>()
-        .map(ConfirmedPlate.fromJson)
-        .toList(growable: false);
-  }
-
   Future<void> sendHomeAssistantEvent(PendingPlateEvent event) async {
     if (_sessionId == null) await refreshConfiguration();
     final plate = event.plate;

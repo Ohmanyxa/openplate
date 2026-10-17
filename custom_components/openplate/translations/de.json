@@ -20,9 +20,7 @@
       }
     },
     "error": {
-      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
-      "https_required": "Für den separaten Erkennungsserver ist eine vollständige HTTPS-Adresse erforderlich.",
-      "api_key_required": "Gib den API-Schlüssel des Erkennungsservers ein."
+      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein."
     },
     "abort": {
       "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."
@@ -36,7 +34,7 @@
         "menu_options": {
           "pairing": "iPhone koppeln",
           "plates": "Kennzeichen verwalten",
-          "recognition": "Erkennungsserver einrichten",
+          "recognition": "Lokale Erkennung",
           "connection": "Home-Assistant-Adresse ändern",
           "advanced": "Erweiterte Einstellungen"
         }
@@ -79,17 +77,13 @@
         }
       },
       "recognition": {
-        "title": "Erkennungsserver einrichten",
-        "description": "Der laufende Erkennungsserver wird unabhängig von der Kopplung eingerichtet. Die App übernimmt Änderungen automatisch innerhalb von etwa 15 Sekunden. Für die Kamerabilder zum separaten Erkennungsserver ist weiterhin HTTPS erforderlich. Die Integration startet diesen Server nicht selbst.",
+        "title": "Lokale Erkennung auf dem iPhone",
+        "description": "Detection und OCR laufen auf dem iPhone. Kamerabilder bleiben auf dem Gerät; nur bestätigte Kennzeichen werden verschlüsselt an Home Assistant gesendet. Kein Erkennungsserver und kein Server-API-Schlüssel erforderlich. Die App übernimmt Änderungen innerhalb von etwa 15 Sekunden.",
         "data": {
-          "recognition_url": "HTTPS-Adresse des Erkennungsservers",
-          "recognition_api_key": "API-Schlüssel des Erkennungsservers",
-          "capture_interval": "Aufnahmeintervall (Sekunden)"
+          "capture_interval": "Frame-Prüfintervall (Sekunden)"
         },
         "data_description": {
-          "recognition_url": "Adresse des lokalen OpenPlate-Servers mit einem vom iPhone vertrauten TLS-Zertifikat.",
-          "recognition_api_key": "Der am Erkennungsserver hinterlegte API-Schlüssel.",
-          "capture_interval": "So häufig sendet das iPhone ein Kamerabild zur Erkennung."
+          "capture_interval": "Mindestabstand zwischen lokalen Auswertungen. Für drei Bestätigungen in vier Sekunden zunächst 1 Sekunde verwenden."
         }
       },
       "advanced": {
@@ -103,9 +97,7 @@
       }
     },
     "error": {
-      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
-      "https_required": "Für den separaten Erkennungsserver ist eine vollständige HTTPS-Adresse erforderlich.",
-      "api_key_required": "Gib den API-Schlüssel des Erkennungsservers ein."
+      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein."
     },
     "abort": {
       "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."

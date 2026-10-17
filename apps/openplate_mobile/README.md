@@ -9,8 +9,8 @@ Flutter/iOS foreground camera client for a mounted OpenPlate camera.
    `http://homeassistant.local:8123` address. No HA certificates are required.
 3. In this app, tap **iPhone per QR-Code koppeln** (or open connection management to pair again).
 4. Scan the code before it expires, then confirm the QR screen in Home Assistant.
-5. Configure plates and the running recognition server in Home Assistant, separately from pairing.
-6. The open app retrieves recognition settings automatically within about 15 seconds, also while the
+5. Configure registered plates in Home Assistant. No recognition server or API key is required.
+6. The open app retrieves processing settings automatically within about 15 seconds, also while the
    camera screen is open. No manual configuration or second QR scan is needed on the iPhone.
 
 ## Live preview and black mode
@@ -20,7 +20,10 @@ configuring a recognition server. It neither takes still photos nor uploads fram
 connection and recognition status are displayed separately; saved pairing data alone is not shown as
 a verified live connection.
 
-Once the recognition server is configured, tap **Erkennung starten** to send frames for recognition.
+After pairing, tap **Erkennung starten**. The first start downloads about 11 MB of pinned models over
+HTTPS and verifies their SHA-256 hashes. Subsequent recognition works offline on the iPhone CPU via
+ONNX Runtime 1.30.0, not yet Core ML/Neural Engine. iOS 15.1+ is required.
+Camera frames never leave the phone; only confirmed plate strings and metadata go encrypted to HA.
 Tap **Erkennung stoppen** to return to local preview. **Schwarzmodus** makes the app surface black and
 hides controls immediately without stopping the camera or a running recognition loop. Tap the black
 screen to reveal controls, then **Vorschau anzeigen** to restore the preview. Controls in black mode
@@ -30,17 +33,22 @@ iOS system indicators remain controlled by iOS; this is not a system screen lock
 On backgrounding, the app pauses capture and releases the camera; returning to the foreground
 reinitializes it and resumes recognition if it was running. Camera initialization/disposal is serialized
 to handle permission dialogs and rapid lifecycle changes. No background camera operation is promised.
-Temporary frames are removed after processing. Pending HA events are held in memory, up to 100;
+The camera supplies a continuous video-frame stream. Recognition admits a current frame at the
+configured processing interval; while processing is busy, newer frames are skipped, not queued.
+The native serial worker letterboxes BGRA for YOLO, crops the original frame for CCT OCR, and returns
+strings to local confirmation (three observations within four seconds, confidence at least 0.8).
+Start with a 1-second processing interval. There are no photo calls, image files or image uploads.
+Android local inference is not implemented. Pending HA events are held in memory, up to 100;
 on overflow the oldest event is discarded and the count appears in recognition status.
 
-Existing v0.5.0 pairings remain valid. A message that the recognition server is missing is independent
-of pairing: configure the running server under **OpenPlate → Configure → Configure recognition server**
-in HA. OpenPlate does not provision that server automatically.
+Existing encrypted pairings remain valid. Legacy server settings are ignored. Continued confirmed
+sightings refresh HA presence; pending events are coalesced per plate and expire after ten seconds.
+Network delivery does not block frame inference.
 
 The QR contains a temporary 256-bit key and a public offer ID. The key is never sent over the network;
 AES-256-GCM and HKDF-SHA256 protect pairing, configuration and plate events, also over local HTTP.
 The offer is consumed after successful exchange and expires after ten minutes. Secrets are stored in
-iOS Keychain. The separate recognition server still requires HTTPS for camera images.
+iOS Keychain. No frame-recognition server is used by the app.
 Upgrade both components and pair again when upgrading to v0.5.0 to enable encrypted-only transport.
 
 The question-mark button on the home screen opens setup help explaining which address belongs to
@@ -57,3 +65,15 @@ flutter analyze
 flutter test
 flutter build ios --no-codesign
 ```
+
+Native tests (replace the simulator ID with an available device):
+
+```bash
+cd ios
+xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+  -destination 'platform=iOS Simulator,id=SIMULATOR_ID' test CODE_SIGNING_ALLOWED=NO
+```
+
+Add `OPENPLATE_MODEL_TESTS=1` to explicitly opt into downloading the real models and the public,
+pinned upstream smoke image. That test checks native detection/OCR against the Python reference
+string `5AU5341`; it is not a German-plate accuracy or physical-iPhone performance benchmark.

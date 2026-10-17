@@ -11,7 +11,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>OpenPlate benötigt die Kamera zur lokalen Kennzeichenerkennung.</string>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>OpenPlate verbindet sich verschlüsselt mit Home Assistant und dem Erkennungsserver in deinem Heimnetz.</string>
+	<string>OpenPlate sendet bestätigte Kennzeichen verschlüsselt an Home Assistant in deinem Heimnetz. Kamerabilder bleiben auf dem iPhone.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -201,9 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(_configurationError!, textAlign: TextAlign.center),
                 if (!settings.isComplete)
                   const Text(
-                    'Erkennungsserver noch nicht eingerichtet. Die Live-Vorschau ist auch ohne '
-                    'Server möglich. Für Kennzeichenerkennung den Server in Home Assistant unter '
-                    'OpenPlate → Konfigurieren → Erkennungsserver einrichten hinterlegen.',
+                    'Home Assistant noch nicht gekoppelt. Die Live-Vorschau funktioniert auch ohne Kopplung. '
+                    'Detection und OCR laufen lokal auf dem iPhone; nur bestätigte Kennzeichen werden verschlüsselt gesendet.',
                     textAlign: TextAlign.center,
                   ),
                 const SizedBox(height: 12),

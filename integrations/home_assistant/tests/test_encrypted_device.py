@@ -69,8 +69,16 @@ class EncryptedDeviceTests(unittest.IsolatedAsyncioTestCase):
         for value in (self.config["secret"], "server-key", "session_id"):
             self.assertNotIn(value, response.text)
         configuration = self.decrypt_response(response, envelope)
-        self.assertEqual(configuration["recognition_api_key"], "server-key")
+        self.assertEqual(configuration["recognition_api_key"], "")
+        self.assertEqual(configuration["recognition_mode"], "on_device")
         self.assertEqual(configuration["session_id"], self.manager._session_id)
+
+    async def test_even_authenticated_frame_payloads_are_rejected(self):
+        payload = {**self.observation(), "image": "not-allowed"}
+        envelope = self.envelope(payload)
+        response = await self.send(envelope)
+        self.assertEqual(response.status, 400)
+        self.assertIsNone(self.manager.last_event)
 
     async def test_valid_events_are_processed_once_and_replay_is_encrypted_rejection(self):
         notifications = []

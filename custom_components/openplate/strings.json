@@ -20,9 +20,7 @@
       }
     },
     "error": {
-      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
-      "https_required": "The separate recognition server requires a complete HTTPS address.",
-      "api_key_required": "Enter the recognition server API key."
+      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments."
     },
     "abort": {
       "pairing_expired": "Pairing is no longer available. Generate a new QR code."
@@ -36,7 +34,7 @@
         "menu_options": {
           "pairing": "Pair an iPhone",
           "plates": "Manage registered plates",
-          "recognition": "Configure recognition server",
+          "recognition": "On-device recognition",
           "connection": "Change Home Assistant address",
           "advanced": "Advanced settings"
         }
@@ -79,17 +77,13 @@
         }
       },
       "recognition": {
-        "title": "Configure recognition server",
-        "description": "Configure the running recognition server separately from pairing. The open app retrieves changes automatically within about 15 seconds. Camera frames to the separate recognition server still require HTTPS. This integration does not start that server itself.",
+        "title": "On-device iPhone recognition",
+        "description": "Detection and OCR run on the iPhone. Camera frames stay on the device; only confirmed plate strings are sent encrypted to Home Assistant. No recognition server or server API key is required. The app retrieves changes within about 15 seconds.",
         "data": {
-          "recognition_url": "Recognition server HTTPS address",
-          "recognition_api_key": "Recognition server API key",
-          "capture_interval": "Capture interval (seconds)"
+          "capture_interval": "Frame processing interval (seconds)"
         },
         "data_description": {
-          "recognition_url": "Local OpenPlate server with a TLS certificate trusted by the iPhone.",
-          "recognition_api_key": "API key configured on the recognition server.",
-          "capture_interval": "How often the iPhone sends a camera frame for recognition."
+          "capture_interval": "Minimum interval between local evaluations. Start with 1 second for three confirmations within four seconds."
         }
       },
       "advanced": {
@@ -103,9 +97,7 @@
       }
     },
     "error": {
-      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
-      "https_required": "The separate recognition server requires a complete HTTPS address.",
-      "api_key_required": "Enter the recognition server API key."
+      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments."
     },
     "abort": {
       "pairing_expired": "Pairing is no longer available. Generate a new QR code."

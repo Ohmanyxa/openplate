@@ -40,7 +40,7 @@ void main() {
       final settings = OpenPlateSettings.fromPairing(configuration);
       expect(settings.isPaired, isTrue);
       expect(settings.homeAssistantWebhookUrl.startsWith('http://'), isTrue);
-      expect(settings.isComplete, isFalse);
+      expect(settings.isComplete, isTrue);
       final api = OpenPlateApi(settings, client: client);
       await api.refreshConfiguration();
       final event = PendingPlateEvent.fromPlate(

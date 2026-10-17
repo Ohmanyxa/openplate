@@ -17,9 +17,9 @@ void main() {
     webhookSecret: '12345678901234567890123456789012',
   );
 
-  test('pairing does not require a recognition server; monitoring does', () {
+  test('local recognition requires pairing but no recognition server', () {
     expect(paired.isPaired, isTrue);
-    expect(paired.isComplete, isFalse);
+    expect(paired.isComplete, isTrue);
   });
 
   test(
@@ -148,7 +148,7 @@ void main() {
     },
   );
 
-  test('only complete HTTPS settings can start monitoring', () {
+  test('existing paired HTTPS settings still work with local recognition', () {
     const settings = OpenPlateSettings(
       recognitionUrl: 'https://openplate.local',
       homeAssistantWebhookUrl: 'https://ha.local/api/webhook/test',

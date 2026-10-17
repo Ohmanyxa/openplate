@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openplate_mobile/camera_screen.dart';
 import 'package:openplate_mobile/openplate_api.dart';
 import 'package:openplate_mobile/settings.dart';
+import 'package:openplate_mobile/local_recognition.dart';
+import 'package:openplate_mobile/video_frame.dart';
 
 const camera = CameraDescription(
   name: 'test-back',
@@ -23,11 +25,11 @@ const previewOnly = OpenPlateSettings(
   webhookSecret: '',
 );
 const configured = OpenPlateSettings(
-  recognitionUrl: 'https://recognition.local',
+  recognitionUrl: '',
   homeAssistantWebhookUrl: 'http://ha.local/api/webhook/test',
   deviceId: 'test',
   captureIntervalSeconds: 1,
-  apiKey: 'test-key',
+  apiKey: '',
   webhookSecret: 'x012345678901234567890123456789012',
 );
 
@@ -39,6 +41,30 @@ class TestCamera extends CameraPlatform {
   int photos = 0;
   bool failInitialization = false;
   Completer<void>? initializationGate;
+  final frames = StreamController<CameraImageData>.broadcast();
+  @override
+  bool supportsImageStreaming() => true;
+  @override
+  Stream<CameraImageData> onStreamedFrameAvailable(
+    int cameraId, {
+    CameraImageStreamOptions? options,
+  }) => frames.stream;
+  void emitFrame() => frames.add(
+    CameraImageData(
+      format: const CameraImageFormat(ImageFormatGroup.bgra8888, raw: 0),
+      planes: [
+        CameraImagePlane(
+          bytes: Uint8List.fromList([0, 0, 255, 255]),
+          bytesPerRow: 4,
+          bytesPerPixel: 4,
+          width: 1,
+          height: 1,
+        ),
+      ],
+      width: 1,
+      height: 1,
+    ),
+  );
   @override
   Future<int> createCamera(
     CameraDescription description,
@@ -96,13 +122,22 @@ class TestCamera extends CameraPlatform {
 
 class TestApi extends OpenPlateApi {
   TestApi(super.settings);
-  int recognitions = 0;
+  final sent = <PendingPlateEvent>[];
   @override
   Future<OpenPlateSettings> refreshConfiguration() async => settings;
   @override
-  Future<List<ConfirmedPlate>> recognize(String imagePath) async {
+  Future<void> sendHomeAssistantEvent(PendingPlateEvent event) async =>
+      sent.add(event);
+}
+
+class TestRecognizer extends LocalPlateRecognizer {
+  int recognitions = 0;
+  @override
+  Future<String> initialize() async => 'local test backend';
+  @override
+  Future<List<PlateObservation>> recognize(VideoFrame frame) async {
     recognitions++;
-    return [];
+    return [const PlateObservation('BTEST1', .95)];
   }
 }
 
@@ -195,34 +230,61 @@ void main() {
     'recognition continues in black mode and pauses in the background',
     (tester) async {
       final api = TestApi(configured);
+      final local = TestRecognizer();
       await tester.pumpWidget(
         MaterialApp(
           home: CameraScreen(
             cameras: const [camera],
             settings: configured,
             apiFactory: (_) => api,
+            recognizer: local,
           ),
         ),
       );
       await tester.pumpAndSettle();
-      expect(api.recognitions, 0);
+      expect(local.recognitions, 0);
       await tester.tap(find.text('Erkennung starten'));
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 20)),
-      );
-      expect(api.recognitions, 1);
+      platform.emitFrame();
+      await tester.pump();
+      await tester.runAsync(() async {
+        platform.emitFrame();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pump();
+      expect(local.recognitions, 1);
       await tester.tap(find.text('Schwarzmodus'));
       await tester.pump(const Duration(seconds: 2));
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1100));
+        platform.emitFrame();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      });
+      await tester.pump();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.pump();
+      expect(local.recognitions, greaterThan(1));
+      expect(api.sent, isEmpty);
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 1100));
+      });
+      platform.emitFrame();
+      await tester.pump();
+      await tester.pump();
+      expect(api.sent.single.plate.plate, 'BTEST1');
+      expect(api.sent.single.plate.observations, 3);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
-      expect(api.recognitions, greaterThan(1));
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pumpAndSettle();
       final pausedPhotos = platform.photos;
       await tester.pump(const Duration(seconds: 3));
       expect(platform.photos, pausedPhotos);
+      expect(platform.photos, 0);
       expect(platform.disposed, 1);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();

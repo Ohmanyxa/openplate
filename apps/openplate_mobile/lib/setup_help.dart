@@ -104,9 +104,10 @@ class SetupHelpScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const Text(
-            'Der Erkennungsserver wird anschließend separat in Home Assistant eingerichtet. '
-            'Seine Adresse brauchst du zum Koppeln des iPhones noch nicht. Die Verbindung '
-            'zum Erkennungsserver benötigt weiterhin HTTPS, weil darüber die Kamerabilder laufen.',
+            'Detection, OCR und Mehrfachbestätigung laufen lokal auf dem iPhone. '
+            'Du brauchst keinen Erkennungsserver. Die Modelle werden beim ersten Start '
+            'heruntergeladen und danach offline genutzt. Kamerabilder bleiben auf dem Handy; '
+            'nur bestätigte Kennzeichen werden verschlüsselt an Home Assistant gesendet.',
           ),
         ],
       ),

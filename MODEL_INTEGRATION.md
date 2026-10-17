@@ -40,7 +40,23 @@ portable correctness baseline. Initialization/download time is reported separate
 time so warm inference is not confused with cold start. Hardware numbers must be collected from real
 runs and are not recorded as claims here.
 
-## iOS assessment
+## Implemented iOS baseline (2026-10-17)
+
+The mounted-camera app now runs the exact pinned ONNX models on-device via the official
+`onnxruntime-objc` 1.30.0 CocoaPod (CPU, two intra-op threads, iOS 15.1+). No Python backend or image
+server is used. The serial Swift adapter implements RGB letterboxing, original-frame cropping,
+uint8 RGB OCR resizing and ten-slot decoding. Dart confirms three video frames within four seconds
+before emitting encrypted plate observations. Model downloads are SHA-256 pinned and cached offline.
+Core ML/Neural Engine execution is not enabled; the conversion discussion below remains future work.
+Physical iPhone accuracy, sustained speed and thermals are not yet measured.
+
+Native iOS simulator tests execute the real pinned models and match the upstream smoke image to the
+Python reference string `5AU5341`. This is a single functional smoke test, not a country-specific
+accuracy claim. The model's region configuration lists Germany, but its text alphabet is only
+`0-9A-Z` plus padding: umlauts and special plates require separate evaluation/normalization policy.
+No real German-plate/iPhone-camera accuracy result has been measured in this workspace.
+
+## Core ML conversion assessment (future work)
 
 Directly embedding this Python backend is not the target. A Swift adapter should use AVFoundation and
 Core ML, with preprocessing and decoding verified against saved ONNX reference tensors.

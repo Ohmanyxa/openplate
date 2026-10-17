@@ -16,7 +16,6 @@ from homeassistant.helpers.selector import (
     QrErrorCorrectionLevel,
     TextSelector,
     TextSelectorConfig,
-    TextSelectorType,
 )
 
 from .configuration import mobile_configuration
@@ -37,7 +36,7 @@ from .const import (
     PAIRING_CODE_LIFETIME_SECONDS,
     PAIRING_WEBHOOK_ID,
 )
-from .pairing import build_pairing_uri, normalize_base_url, normalize_https_base_url
+from .pairing import build_pairing_uri, normalize_base_url
 from .pairing_webhook import async_ensure_pairing_gateway
 
 _QR_FIELD = "qr_code"
@@ -45,10 +44,6 @@ _QR_FIELD = "qr_code"
 
 def _plate_selector() -> TextSelector:
     return TextSelector(TextSelectorConfig(multiline=True))
-
-
-def _password_selector() -> TextSelector:
-    return TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 def _setup_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -261,41 +256,24 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_recognition(self, user_input: dict[str, Any] | None = None) -> FlowResult:
-        errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                recognition_url = normalize_https_base_url(user_input[CONF_RECOGNITION_URL])
-            except ValueError:
-                errors[CONF_RECOGNITION_URL] = "https_required"
-            if not user_input[CONF_RECOGNITION_API_KEY].strip():
-                errors[CONF_RECOGNITION_API_KEY] = "api_key_required"
-            if not errors:
-                return self.async_create_entry(
-                    title="",
-                    data=self._updated_options(
-                        {**user_input, CONF_RECOGNITION_URL: recognition_url}
-                    ),
-                )
+            return self.async_create_entry(
+                title="",
+                data=self._updated_options(
+                    {CONF_CAPTURE_INTERVAL: user_input[CONF_CAPTURE_INTERVAL]}
+                ),
+            )
         defaults = {**self._current, **(user_input or {})}
         return self.async_show_form(
             step_id="recognition",
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_RECOGNITION_URL,
-                        default=defaults.get(CONF_RECOGNITION_URL, ""),
-                    ): str,
-                    vol.Required(
-                        CONF_RECOGNITION_API_KEY,
-                        default=defaults.get(CONF_RECOGNITION_API_KEY, ""),
-                    ): _password_selector(),
-                    vol.Required(
                         CONF_CAPTURE_INTERVAL,
                         default=defaults.get(CONF_CAPTURE_INTERVAL, DEFAULT_CAPTURE_INTERVAL),
                     ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
                 }
             ),
-            errors=errors,
         )
 
     async def async_step_pairing_qr(self, user_input: dict[str, Any] | None = None) -> FlowResult:
