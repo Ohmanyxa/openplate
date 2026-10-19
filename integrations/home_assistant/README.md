@@ -116,6 +116,16 @@ Possession of the paired key authenticates observations, not their camera proven
 phone/key or a copied physical plate remains outside that guarantee. A plate match alone must not
 authorize a garage door.
 
+## Garages with built-in actions
+
+Configure → **Garages and direct control** creates named garages with multiple
+registered plates, an existing cover/switch, camera orientation and separate
+`arrival` / `departure` actions. Direct control is off by default and requires
+explicit opt-in. Each garage gets a movement sensor; no user automation is needed.
+See [setup, action limits and safety requirements](../../docs/GARAGES.md).
+Do not use plate matching as secure vehicle authentication or direction as proof
+that the doorway is clear. Independent door safety sensors remain essential.
+
 ## Pairing regression tests
 
 These tests exercise the one-time gateway and form selectors against Home Assistant 2026.10.1:

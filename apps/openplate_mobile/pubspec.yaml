@@ -1,7 +1,7 @@
 name: openplate_mobile
 description: "Mounted iOS camera client for OpenPlate."
 publish_to: 'none'
-version: 0.8.0+9
+version: 0.9.0+10
 
 environment:
   sdk: ^3.11.1

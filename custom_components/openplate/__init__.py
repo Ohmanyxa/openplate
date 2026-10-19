@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import secrets
 import time
@@ -32,9 +33,12 @@ from .const import (
     SIGNATURE_MAX_AGE_SECONDS,
 )
 from .encryption import seal, unseal
+from .garages import movement_status, validate_garage
 from .pairing_webhook import async_ensure_pairing_gateway
 from .plates import normalize_plate, parse_plates
 from .security import valid_signature
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,6 +62,20 @@ class OpenPlateManager:
             and re.fullmatch(r"cover\.[a-z0-9_]+", entity)
         }
         self.presence = {plate: PlatePresence() for plate in self.plates}
+        self.garage_instances: dict[str, dict[str, Any]] = {}
+        for key, value in self.config.get("garages", {}).items():
+            try:
+                validate_garage(value, self.plates)
+            except (ValueError, TypeError):
+                continue
+            self.garage_instances[key] = value
+        self.garage_states = {
+            key: {"status": "unknown", "plate": None, "action_result": "none"}
+            for key in self.garage_instances
+        }
+        self._garage_directions: dict[tuple[str, str], str] = {}
+        self._garage_actions: dict[str, float] = {}
+        self._garage_busy: set[str] = set()
         self.last_event: dict[str, Any] | None = None
         self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
         self._nonces: dict[str, float] = {}
@@ -239,6 +257,65 @@ class OpenPlateManager:
         if not was_present:
             self.notify("appeared", data)
         self.notify("state", data)
+        self._process_garages(data, now)
+
+    def _process_garages(self, data: dict[str, Any], now: float) -> None:
+        for key, garage in self.garage_instances.items():
+            if data["plate"] not in garage["plates"]:
+                continue
+            status = movement_status(data.get("motion"), garage["arrival_direction"])
+            if status is None:
+                continue
+            latch = (key, data["plate"])
+            if self._garage_directions.get(latch) == status:
+                continue
+            self._garage_directions[latch] = status
+            state = self.garage_states[key]
+            state.update(status=status, plate=data["plate"], action_result="disabled")
+            self.notify(status, {**data, "garage_id": key, "status": status})
+            action = garage[f"{status}_action"]
+            if not garage["enabled"] or action == "none":
+                continue
+            # Only fresh, confirmed, encrypted/session-bound observations may actuate.
+            try:
+                observed = datetime.fromisoformat(data["timestamp"].replace("Z", "+00:00"))
+                fresh = observed.tzinfo is not None and abs(now - observed.timestamp()) <= 15
+                confirmed = float(data["confidence"]) >= 0.8 and int(data["observations"]) >= 3
+            except (KeyError, TypeError, ValueError, OverflowError):
+                fresh = confirmed = False
+            if not fresh or not confirmed or self.config.get(CONF_TRANSPORT_VERSION) != 2:
+                state["action_result"] = "rejected"
+            elif key in self._garage_busy or now - self._garage_actions.get(key, now - 60) < 60:
+                state["action_result"] = "cooldown"
+            else:
+                self._garage_actions[key] = now
+                self._garage_busy.add(key)
+                state["action_result"] = "pending"
+                self.entry.async_create_background_task(
+                    self.hass, self._actuate_garage(key, action), f"OpenPlate garage {key}"
+                )
+            self.notify("state", {"garage_id": key})
+
+    async def _actuate_garage(self, key: str, action: str) -> None:
+        garage = self.garage_instances[key]
+        state = self.garage_states[key]
+        domain = garage["target"].split(".")[0]
+        service = {"open": "open_cover", "close": "close_cover", "on": "turn_on", "off": "turn_off"}
+        try:
+            target = self.hass.states.get(garage["target"])
+            if target is None or target.state in {"unknown", "unavailable"}:
+                state["action_result"] = "unavailable"
+            else:
+                await self.hass.services.async_call(
+                    domain, service[action], {"entity_id": garage["target"]}, blocking=True
+                )
+                state["action_result"] = "sent"
+        except Exception:  # Device failure must not break recognition or retry physical actions.
+            state["action_result"] = "failed"
+            _LOGGER.exception("OpenPlate garage action failed")
+        finally:
+            self._garage_busy.discard(key)
+            self.notify("state", {"garage_id": key})
 
     @callback
     def check_departures(self, _now: datetime) -> None:
@@ -248,6 +325,8 @@ class OpenPlateManager:
             if state.present and current - state.last_seen >= timeout:
                 state.present = False
                 state.motion = None
+                for latch in [item for item in self._garage_directions if item[1] == plate]:
+                    self._garage_directions.pop(latch)
                 data = {
                     "plate": plate,
                     "display_name": self.plates[plate],

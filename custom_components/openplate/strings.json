@@ -37,7 +37,8 @@
           "recognition": "On-device recognition",
           "connection": "Change Home Assistant address",
           "advanced": "Advanced settings",
-          "garages": "Assign plates to garage doors"
+          "garages": "Assign plates to garage doors",
+          "garage_instances": "Garages and direct control"
         }
       },
       "plates": {
@@ -109,12 +110,33 @@
           "garage_entity_id": "Garage door (cover entity)",
           "remove_assignment": "Remove current assignment"
         }
+      },
+      "garage_instances": {
+        "title": "Add or edit a garage",
+        "data": {
+          "garage_id": "Garage"
+        }
+      },
+      "garage_instance": {
+        "title": "Configure garage",
+        "description": "Assign plates and a cover or switch. approaching = plate grows; receding = shrinks. Use open/close for covers, on/off for switches; none does nothing. Direct control is optional: plates can be copied and direction is an estimate. Enable only with independent door safety sensors! departure does NOT prove the doorway is clear. Switches must provide actual on/off control, not toggle/pulse door relays. Actions have a minimum 60-second cooldown. The sensor reports last movement, not door position.",
+        "data": {
+          "name": "Name",
+          "plates": "Assigned plates",
+          "target": "Door or switch",
+          "arrival_direction": "Camera direction for arrival",
+          "arrival_action": "Action on arrival",
+          "departure_action": "Action on departure",
+          "enabled": "Enable direct control – I understand the risks",
+          "remove": "Delete this garage"
+        }
       }
     },
     "error": {
       "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
       "unknown_plate": "Plate is not registered.",
-      "invalid_garage": "Select an existing cover entity."
+      "invalid_garage": "Select an existing cover entity.",
+      "invalid_garage_instance": "Check name, registered plates and available target. cover allows none/open/close; switch allows none/on/off."
     },
     "abort": {
       "pairing_expired": "Pairing is no longer available. Generate a new QR code.",

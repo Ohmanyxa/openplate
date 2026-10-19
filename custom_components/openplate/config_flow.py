@@ -40,6 +40,7 @@ from .const import (
     PAIRING_CODE_LIFETIME_SECONDS,
     PAIRING_WEBHOOK_ID,
 )
+from .garages import ACTIONS, validate_garage
 from .pairing import build_pairing_uri, normalize_base_url
 from .pairing_webhook import async_ensure_pairing_gateway
 from .plates import parse_plates
@@ -185,6 +186,7 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self) -> None:
         self._garage_plate: str | None = None
+        self._garage_id: str | None = None
         self._pending_options: dict[str, Any] | None = None
         self._pairing_uri: str | None = None
 
@@ -198,7 +200,111 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["pairing", "plates", "garages", "recognition", "connection", "advanced"],
+            menu_options=[
+                "pairing",
+                "plates",
+                "garage_instances",
+                "garages",
+                "recognition",
+                "connection",
+                "advanced",
+            ],
+        )
+
+    async def async_step_garage_instances(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        garages = self._current.get("garages", {})
+        if user_input is not None:
+            selected = user_input.get("garage_id")
+            if selected == "new" or selected in garages:
+                self._garage_id = secrets.token_hex(8) if selected == "new" else selected
+                return await self.async_step_garage_instance()
+        return self.async_show_form(
+            step_id="garage_instances",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("garage_id"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": "new", "label": "＋ New garage"},
+                                *[
+                                    {"value": key, "label": garage["name"]}
+                                    for key, garage in garages.items()
+                                ],
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_garage_instance(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        if self._garage_id is None:
+            return await self.async_step_garage_instances()
+        plates = parse_plates(self._current.get(CONF_PLATES, ""))
+        garages = dict(self._current.get("garages", {}))
+        current = garages.get(self._garage_id, {})
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get("remove", False):
+                garages.pop(self._garage_id, None)
+            else:
+                value = {
+                    key: user_input.get(key)
+                    for key in (
+                        "name",
+                        "plates",
+                        "target",
+                        "arrival_direction",
+                        "arrival_action",
+                        "departure_action",
+                        "enabled",
+                    )
+                }
+                try:
+                    validate_garage(value, plates)
+                    target = self.hass.states.get(value["target"])
+                    if target is None or target.state in {"unknown", "unavailable"}:
+                        raise ValueError("target")
+                    garages[self._garage_id] = value
+                except (ValueError, TypeError):
+                    errors["base"] = "invalid_garage_instance"
+            if not errors:
+                return self.async_create_entry(
+                    title="", data=self._updated_options({"garages": garages})
+                )
+            current = {**current, **user_input}
+        schema: dict[Any, Any] = {
+            vol.Required("name", default=current.get("name", "Garage")): str,
+            vol.Required("plates", default=current.get("plates", [])): SelectSelector(
+                SelectSelectorConfig(
+                    multiple=True,
+                    options=[
+                        {"value": plate, "label": f"{name} ({plate})"}
+                        for plate, name in plates.items()
+                    ],
+                )
+            ),
+            vol.Required(
+                "target", **({"default": current["target"]} if current.get("target") else {})
+            ): EntitySelector(EntitySelectorConfig(domain=["cover", "switch"])),
+            vol.Required(
+                "arrival_direction", default=current.get("arrival_direction", "approaching")
+            ): SelectSelector(SelectSelectorConfig(options=["approaching", "receding"])),
+            vol.Required(
+                "arrival_action", default=current.get("arrival_action", "none")
+            ): SelectSelector(SelectSelectorConfig(options=sorted(ACTIONS))),
+            vol.Required(
+                "departure_action", default=current.get("departure_action", "none")
+            ): SelectSelector(SelectSelectorConfig(options=sorted(ACTIONS))),
+            vol.Required("enabled", default=current.get("enabled", False)): bool,
+            vol.Optional("remove", default=False): bool,
+        }
+        return self.async_show_form(
+            step_id="garage_instance", data_schema=vol.Schema(schema), errors=errors
         )
 
     async def async_step_plates(self, user_input: dict[str, Any] | None = None) -> FlowResult:

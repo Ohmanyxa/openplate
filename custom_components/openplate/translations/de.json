@@ -37,7 +37,8 @@
           "recognition": "Lokale Erkennung",
           "connection": "Home-Assistant-Adresse ändern",
           "advanced": "Erweiterte Einstellungen",
-          "garages": "Kennzeichen einem Tor zuordnen"
+          "garages": "Kennzeichen einem Tor zuordnen",
+          "garage_instances": "Garagen und direkte Steuerung"
         }
       },
       "plates": {
@@ -109,12 +110,33 @@
           "garage_entity_id": "Garagentor (Cover-Entität)",
           "remove_assignment": "Vorhandene Zuordnung entfernen"
         }
+      },
+      "garage_instances": {
+        "title": "Garage anlegen oder bearbeiten",
+        "data": {
+          "garage_id": "Garage"
+        }
+      },
+      "garage_instance": {
+        "title": "Garage konfigurieren",
+        "description": "Kennzeichen auswählen und Tor oder Schalter zuordnen. approaching = Kennzeichen wird größer; receding = kleiner. Für cover nur open/close, für switch nur on/off; none tut nichts. Direkte Steuerung ist optional: Kennzeichen können kopiert werden, die Richtung ist nur eine Schätzung. Nur mit eigener Tor-Sicherheitssensorik aktivieren! departure beweist NICHT, dass die Durchfahrt frei ist. Schalter müssen echte Ein/Aus-Funktionen haben, keine Tor-Impulsrelais. Mindestens 60 Sekunden Abstand zwischen Aktionen. Der Sensor zeigt die letzte Bewegung, nicht die Torposition.",
+        "data": {
+          "name": "Name",
+          "plates": "Zugeordnete Kennzeichen",
+          "target": "Tor oder Schalter",
+          "arrival_direction": "Kamerarichtung für arrival",
+          "arrival_action": "Aktion bei arrival",
+          "departure_action": "Aktion bei departure",
+          "enabled": "Direkte Steuerung aktivieren – Risiken verstanden",
+          "remove": "Diese Garage löschen"
+        }
       }
     },
     "error": {
       "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
       "unknown_plate": "Kennzeichen ist nicht registriert.",
-      "invalid_garage": "Eine vorhandene Cover-Entität auswählen."
+      "invalid_garage": "Eine vorhandene Cover-Entität auswählen.",
+      "invalid_garage_instance": "Name, registrierte Kennzeichen und verfügbares Ziel prüfen. cover erlaubt none/open/close; switch erlaubt none/on/off."
     },
     "abort": {
       "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code.",

@@ -12,7 +12,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:  # type: i
 
 class OpenPlateEventEntity(OpenPlateEntity, EventEntity):
     _attr_name = "Plate event"
-    _attr_event_types = ["recognized", "appeared", "disappeared"]
+    _attr_event_types = ["recognized", "appeared", "disappeared", "arrival", "departure"]
     _attr_icon = "mdi:car-connected"
 
     def __init__(self, manager) -> None:  # type: ignore[no-untyped-def]
