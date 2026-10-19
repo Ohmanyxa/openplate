@@ -17,7 +17,7 @@ class OpenPlatePresenceSensor(OpenPlateEntity, BinarySensorEntity):
     def __init__(self, manager, plate: str) -> None:  # type: ignore[no-untyped-def]
         super().__init__(manager)
         self.plate = plate
-        self._attr_name = f"{manager.plates[plate]} recently seen"
+        self._attr_name = f"{plate} detected"
         self._attr_unique_id = f"{manager.config[CONF_DEVICE_ID]}_{plate}_present"
 
     @property
@@ -29,7 +29,7 @@ class OpenPlatePresenceSensor(OpenPlateEntity, BinarySensorEntity):
         motion = self.manager.presence[self.plate].motion
         return {
             "plate": self.plate,
-            "garage_entity_id": self.manager.garages.get(self.plate),
+            "display_name": self.manager.plates[self.plate],
             "motion": motion,
-            "direction": motion.get("direction", "unknown") if motion else "unknown",
+            "direction": self.manager.presence[self.plate].direction,
         }

@@ -31,6 +31,46 @@ class RunnerTests: XCTestCase {
     XCTAssertThrowsError(try LocalPlateRecognizer.decodePlate(probabilities))
   }
 
+  func testUmlautsRequireMatchingIndependentImageReading() {
+    for (plain, german) in [("MUB123", "MÜB123"), ("OAB12", "ÖAB12"), ("AAB12", "ÄAB12")] {
+      let result = LocalPlateRecognizer.mergeUmlautReading((plain, 0.96),
+        candidates: [(german, 0.9)])
+      XCTAssertEqual(result.text, german)
+      XCTAssertEqual(result.confidence, 0.9)
+    }
+    let plain = (text: "MUB123", confidence: 0.96)
+    XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(plain,
+      candidates: [("MU\u{0308} B-123", 0.9)]).text, "MÜB123")
+    for candidates: [(String, Double)] in [[], [("MÜB123", 0.7)], [("MÜB124", 0.99)],
+                                          [("MÜB123", .nan)], [("MÙB123", 0.99)]] {
+      XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(plain, candidates: candidates).text, plain.text)
+    }
+    XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(("AUB12", 0.95),
+      candidates: [("ÄUB12", 0.9), ("AÜB12", 0.9)]).text, "AUB12")
+  }
+
+  /// Synthetic rendering tests the Vision path, not real German-plate accuracy.
+  func testLocalVisionReadsRenderedGermanUmlauts() throws {
+    for text in ["MÜ AB123", "BÖ AB123", "SÄK AB123"] {
+      let format = UIGraphicsImageRendererFormat()
+      format.scale = 1
+      let image = UIGraphicsImageRenderer(size: CGSize(width: 1000, height: 180), format: format).image { _ in
+        UIColor.white.setFill()
+        UIRectFill(CGRect(x: 0, y: 0, width: 1000, height: 180))
+        (text as NSString).draw(at: CGPoint(x: 35, y: 15), withAttributes: [
+          .font: UIFont.monospacedSystemFont(ofSize: 110, weight: .medium),
+          .foregroundColor: UIColor.black,
+        ])
+      }
+      let candidates = try LocalPlateRecognizer.germanTextCandidates(XCTUnwrap(image.cgImage))
+      let base = text.replacingOccurrences(of: " ", with: "")
+        .replacingOccurrences(of: "Ü", with: "U").replacingOccurrences(of: "Ö", with: "O")
+        .replacingOccurrences(of: "Ä", with: "A")
+      XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading((base, 0.99), candidates: candidates).text,
+                     text.replacingOccurrences(of: " ", with: ""))
+    }
+  }
+
   /// Explicit opt-in downloads pinned models and a public upstream smoke image.
   /// This is not a German-plate accuracy benchmark or a physical-device performance test.
   func testPinnedModelsRecognizeUpstreamImageLocally() async throws {

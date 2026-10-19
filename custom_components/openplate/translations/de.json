@@ -30,25 +30,18 @@
     "step": {
       "init": {
         "title": "OpenPlate verwalten",
-        "description": "Wähle aus, was du konfigurieren möchtest.",
+        "description": "Pro Kennzeichen gibt es einen Anwesenheits- und einen Richtungssensor. Tore und Schalter steuerst du mit Home-Assistant-Automationen.",
         "menu_options": {
-          "pairing": "iPhone koppeln",
           "plates": "Kennzeichen verwalten",
-          "recognition": "Lokale Erkennung",
-          "connection": "Home-Assistant-Adresse ändern",
-          "advanced": "Erweiterte Einstellungen",
-          "garages": "Kennzeichen einem Tor zuordnen",
-          "garage_instances": "Garagen und direkte Steuerung"
+          "pairing": "iPhone koppeln",
+          "settings": "Kamera und Verbindung"
         }
       },
       "plates": {
-        "title": "Registrierte Kennzeichen",
-        "description": "Füge Kennzeichen hinzu, benenne sie um oder entferne sie. Änderungen werden nach dem Absenden übernommen.",
+        "title": "Kennzeichen verwalten",
+        "description": "Wähle „Kennzeichen hinzufügen“ oder ein vorhandenes Kennzeichen zum Bearbeiten. Jedes Kennzeichen hat eigene Eingabefelder und eigene Sensoren.",
         "data": {
-          "plates": "Registrierte Kennzeichen"
-        },
-        "data_description": {
-          "plates": "Ein Kennzeichen pro Zeile als KENNZEICHEN=Anzeigename. Leerzeichen und Bindestriche werden normalisiert."
+          "plate": "Kennzeichen auswählen"
         }
       },
       "pairing": {
@@ -97,50 +90,42 @@
           "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
       },
-      "garages": {
-        "title": "Kennzeichen auswählen",
-        "data": {
-          "plate": "Kennzeichen"
+      "settings": {
+        "title": "Kamera und Verbindung",
+        "menu_options": {
+          "recognition": "Lokale Erkennung",
+          "connection": "Home-Assistant-Adresse",
+          "advanced": "Anwesenheitsdauer"
         }
       },
-      "garage": {
-        "title": "Tor für {plate}",
-        "description": "Die Zuordnung ergänzt Ereignisse und Sensoren. Sie öffnet oder schließt kein Tor automatisch. Richtungswerte sind nur Schätzungen.",
+      "plate": {
+        "title": "Kennzeichen bearbeiten",
+        "description": "Kennzeichen ohne Leerzeichen oder Bindestriche eingeben, z. B. MÜAB123. Anzeigename separat eintragen; kein KENNZEICHEN=Name-Format erforderlich. Ä, Ö und Ü sind eigene Zeichen und werden nicht mit A, O und U gleichgesetzt.",
         "data": {
-          "garage_entity_id": "Garagentor (Cover-Entität)",
-          "remove_assignment": "Vorhandene Zuordnung entfernen"
-        }
-      },
-      "garage_instances": {
-        "title": "Garage anlegen oder bearbeiten",
-        "data": {
-          "garage_id": "Garage"
-        }
-      },
-      "garage_instance": {
-        "title": "Garage konfigurieren",
-        "description": "Kennzeichen auswählen und Tor oder Schalter zuordnen. approaching = Kennzeichen wird größer; receding = kleiner. Für cover nur open/close, für switch nur on/off; none tut nichts. Direkte Steuerung ist optional: Kennzeichen können kopiert werden, die Richtung ist nur eine Schätzung. Nur mit eigener Tor-Sicherheitssensorik aktivieren! departure beweist NICHT, dass die Durchfahrt frei ist. Schalter müssen echte Ein/Aus-Funktionen haben, keine Tor-Impulsrelais. Mindestens 60 Sekunden Abstand zwischen Aktionen. Der Sensor zeigt die letzte Bewegung, nicht die Torposition.",
-        "data": {
-          "name": "Name",
-          "plates": "Zugeordnete Kennzeichen",
-          "target": "Tor oder Schalter",
-          "arrival_direction": "Kamerarichtung für arrival",
-          "arrival_action": "Aktion bei arrival",
-          "departure_action": "Aktion bei departure",
-          "enabled": "Direkte Steuerung aktivieren – Risiken verstanden",
-          "remove": "Diese Garage löschen"
+          "plate": "Kennzeichen",
+          "display_name": "Anzeigename",
+          "remove": "Dieses Kennzeichen löschen"
+        },
+        "data_description": {
+          "plate": "Ohne Leerzeichen, z. B. BAB123 oder MÜAB123."
         }
       }
     },
     "error": {
       "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
-      "unknown_plate": "Kennzeichen ist nicht registriert.",
-      "invalid_garage": "Eine vorhandene Cover-Entität auswählen.",
-      "invalid_garage_instance": "Name, registrierte Kennzeichen und verfügbares Ziel prüfen. cover erlaubt none/open/close; switch erlaubt none/on/off."
+      "invalid_plate": "Gib ein Kennzeichen mit höchstens 10 Buchstaben/Ziffern ein; Ä/Ö/Ü sind erlaubt.",
+      "duplicate_plate": "Dieses Kennzeichen ist bereits registriert.",
+      "invalid_display_name": "Gib einen Anzeigenamen ohne Zeilenumbruch oder Gleichheitszeichen ein."
     },
     "abort": {
-      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code.",
-      "no_registered_plates": "Bitte zuerst Kennzeichen registrieren."
+      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."
+    }
+  },
+  "selector": {
+    "registered_plate": {
+      "options": {
+        "__new__": "＋ Kennzeichen hinzufügen"
+      }
     }
   }
 }

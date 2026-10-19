@@ -1,64 +1,65 @@
-# Garagen und direkte Steuerung
+# Kennzeichen-Sensoren und Home-Assistant-Automationen
 
-In Home Assistant: **Einstellungen → Geräte & Dienste → OpenPlate → Konfigurieren →
-Garagen und direkte Steuerung**. „New garage“ legt eine benannte Garage an;
-vorhandene Garagen lassen sich bearbeiten oder löschen. Jede Garage gehört zur
-konfigurierten Kamera und erhält eine stabile ID sowie einen Bewegungssensor.
-Mehrere Garagen und mehrere registrierte Kennzeichen je Garage sind möglich.
-Kennzeichen zuerst unter „Registrierte Kennzeichen“ anlegen.
+## Übersichtliche Einrichtung
 
-Pro Garage auswählen:
+**Einstellungen → Geräte & Dienste → OpenPlate → Konfigurieren** enthält:
 
-- Name, Kennzeichen und vorhandenes `cover` oder `switch` als Ziel.
-- Kamerarichtung für `arrival`: `approaching` (Kennzeichen wächst) oder `receding`
-  (Kennzeichen schrumpft). Die andere Richtung ergibt `departure`.
-- Getrennte Aktionen: `open`/`close` für cover, `on`/`off` für switch.
-  `none` führt keine Aktion aus. Beispiel: arrival=open, departure=none.
-- Direkte Steuerung bewusst aktivieren; standardmäßig deaktiviert.
+- **Kennzeichen verwalten:** hinzufügen, bearbeiten oder löschen. Jedes Kennzeichen
+  hat ein eigenes Feld und einen separaten Anzeigenamen. Ohne Leerzeichen oder
+  Bindestriche eingeben, z. B. `MÜAB123`; kein `KENNZEICHEN=Name` nötig.
+- **iPhone koppeln:** QR-Kopplung.
+- **Kamera und Verbindung:** Erkennung, HA-Adresse und Anwesenheitsdauer.
 
-Es ist keine zusätzliche HA-Automation erforderlich. Der Sensor zeigt die **letzte
-bestätigte Bewegung**, nicht die Torposition oder Fahrzeuganwesenheit; nach Neustart
-ist er `unknown`. Attribute nennen Kennzeichen, Ziel, Aktivierung und Ergebnis
-(`disabled`, `rejected`, `cooldown`, `pending`, `sent`, `unavailable`, `failed`).
-`sent` bestätigt nur den HA-Serviceaufruf, nicht die tatsächliche Torbewegung.
-Das vorhandene Plate-event unterstützt zusätzlich `arrival` und `departure` mit
-`garage_id`. Alte Kennzeichen→Tor-Zuordnungen bleiben reine Metadaten und aktivieren
-keine Steuerung. Zum Umstieg eine neue Garage anlegen.
+Vorhandene Kennzeichen und Kopplungen werden übernommen. Ä/Ö/Ü sind eigene Zeichen,
+keine automatischen A/O/U-Aliase. Die iPhone-App ergänzt das ASCII-OCR-Modell durch
+eine lokale Vision-Nachprüfung am Originalausschnitt; Erkennungsqualität und kleine
+Umlautpunkte müssen weiterhin in der realen Montage getestet werden.
 
-## Auslösegrenzen
+## Zwei Entitäten je Kennzeichen
 
-Die Größenentwicklung wird bereits lokal auf dem iPhone über mehrere Bounding-Boxes
-bestimmt. HA prüft Richtung, Vorzeichen der Größenänderung und Mindestmessumfang.
-Unbekannte Kennzeichen und fehlende/unklare Bewegung lösen nicht aus.
-Verschlüsselte v2-Verbindung, aktuelle Meldung (höchstens 15 Sekunden Abweichung),
-Konfidenz mindestens 0,8 und mindestens drei OCR-Beobachtungen sind Voraussetzungen
-für direkte Aktionen. Datum/Uhrzeit müssen auf beiden Geräten stimmen.
+| Entität | Zustand | Bedeutung |
+|---|---|---|
+| Binary-Sensor „KENNZEICHEN detected“ | `on` / `off` | Intern true/false: bestätigt erkannt und zuletzt innerhalb des Timeouts gesehen |
+| Sensor „KENNZEICHEN direction“ | `arrival` | Kennzeichen wird über mehrere Frames größer: zur Kamera |
+| Richtungssensor | `departure` | Kennzeichen wird kleiner: von der Kamera weg |
+| Richtungssensor | `stationary` | Kaum Größen-/Positionsänderung |
+| Richtungssensor | `unknown` | Fehlende oder unsichere Richtung, Start oder Anwesenheit abgelaufen |
 
-Pro Kennzeichen/Garage wird dieselbe Richtung erst nach Richtungswechsel oder dem
-Not-seen-Timeout wieder als Ereignis gemeldet. Aktionen haben zusätzlich einen
-garagenweiten Mindestabstand von 60 Sekunden; unterdrückte Aktionen werden **nicht**
-später nachgeholt. Laufende Aktionen sperren weitere Aktionen dieser Garage.
-Verschwinden allein schließt niemals ein Tor. Nicht verfügbare Ziele und Fehler
-führen nicht zu automatischen Wiederholungen. Beim Entladen werden Hintergrundtasks
-von HA beendet; bereits versandte Gerätebefehle sind nicht rückgängig zu machen.
+Mindestens vier gültige Größenmessungen über zwei Sekunden sind nötig.
+Einzelne Bounding-Box-Schwankungen sollen nicht auslösen. Bewegung wird lokal auf
+dem iPhone berechnet; übertragen werden nur Kennzeichen und kleine Metadaten,
+verschlüsselt. Bei fehlendem oder altem App-Support bleibt die Richtung unbekannt.
 
-## Sicherheit
+Die Richtung beschreibt die jüngste Beobachtung und wird beim Not-seen-Timeout
+zurückgesetzt. Verschwinden ist **kein** `departure`. Der Binary-Sensor meldet
+„kürzlich erkannt“, nicht die tatsächliche Parkposition. Ein fremdes Kennzeichen
+schaltet registrierte Kennzeichen nicht ein; jedes hat einen eigenen Zustand.
 
-Ein Kennzeichen kann kopiert werden. Verschlüsselung authentifiziert das gekoppelte
-iPhone, nicht das Fahrzeug. Die Größenheuristik kann durch Perspektive, Zoom und
-Verdeckungen irren. `departure` beweist **keine freie Durchfahrt**. Automatisches
-Schließen darf nur mit unabhängiger, funktionsfähiger Sicherheitssensorik des
-Torantriebs benutzt werden. Nicht als alleinige Zugangssicherung einsetzen.
+## Steuerung bleibt bei HA
 
-Switches müssen echte Ein-/Aus-Ziele sein (z. B. Licht), keine Impulsrelais mit
-wechselnder Torfunktion. `turn_on` wäre bei solchen Relais trotz eindeutiger
-HA-Aktion kein sicherer Öffnen-Befehl. Für Tore stattdessen ein geeignetes cover
-mit expliziten Öffnen-/Schließen-Aktionen verwenden. Kein `toggle` implementiert.
+OpenPlate ruft keine Tor-/Schalteraktionen mehr auf. Alte Zuordnungen/Aktionsoptionen
+bleiben gespeichert, werden aber ignoriert; alte Garagen-Sensoren werden entfernt.
+Vorhandene Präsenz-Unique-IDs bleiben erhalten. Beim Löschen eines Kennzeichens werden
+seine Präsenz-/Richtungsentitäten entfernt; bestehende Automationen dann prüfen.
 
-Mehrere Kameras steuern unabhängig: dasselbe Tor nicht parallel in mehreren
-OpenPlate-Kameraeinträgen direkt steuern. Cooldown gilt pro Garage, nicht global
-über Kameras hinweg. Nach Neustart sind Richtungslatches und Cooldown zurückgesetzt.
+Für Automationen die Zustandsänderung des **Richtungssensors** auf `arrival` oder
+`departure` verwenden. Präsenz kann schon einen Frame früher auf `on` wechseln;
+ein reiner off→on-Trigger mit Richtungsbedingung könnte deshalb die Ankunft verpassen.
+Die tatsächlichen Entity-IDs deiner Instanz aus der Entitätenliste auswählen.
 
-Automatisierte Tests prüfen Policy, Optionsflow, Sensor, Entprellung und gemockte
-HA-Serviceaufrufe. Echte Tore/Schalter und Montagebedingungen sind vor Ort separat
-zu testen, zunächst mit deaktivierter Steuerung oder einer ungefährlichen Testlast.
+Im Dashboard lassen sich echter Torstatus, Kennzeichen-Anwesenheit und Richtung
+nebeneinander darstellen. Den echten Torstatus liefert die vorhandene cover-Entität,
+nicht OpenPlate. Bei andersherum ausgerichteter Kamera kann `arrival` an der Kamera
+einer Abfahrt vom Grundstück entsprechen; diese Zuordnung gehört in die Automation.
+
+## Sicherheit und Teststand
+
+Kennzeichen können kopiert werden; ein gekoppeltes iPhone ist kein Beweis für
+Fahrzeugidentität. Richtungsschätzung kann durch Perspektive, Zoom und Verdeckung
+irren. `departure` beweist keine freie Durchfahrt. Für automatisches Schließen sind
+unabhängige Sicherheitssensorik und die Schutzfunktionen des Torantriebs erforderlich.
+Zuerst mit einer Benachrichtigung oder Testlast prüfen.
+
+HA-Tests decken separate Kennzeichenfelder, Sensorzustände, Timeout, exakte
+Umlautidentitäten, Registry-Bereinigung und ausbleibende Aktoraufrufe ab.
+Ein realer iPhone-/Tor-Test steht noch aus.

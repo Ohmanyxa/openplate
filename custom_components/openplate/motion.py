@@ -3,6 +3,23 @@
 import math
 
 
+def movement_status(motion: object) -> str:
+    """Growing/shrinking plate size determines camera-relative direction."""
+    try:
+        validate_motion(motion)
+    except (ValueError, TypeError):
+        return "unknown"
+    direction = motion["direction"]
+    rate = motion["scale_rate"]
+    if direction == "approaching" and rate > 0.04:
+        return "arrival"
+    if direction == "receding" and rate < -0.04:
+        return "departure"
+    if direction == "stationary" and abs(rate) < 0.015:
+        return "stationary"
+    return "unknown"
+
+
 def validate_motion(value: object) -> None:
     fields = {"direction", "dx", "dy", "scale_rate", "samples", "span_seconds"}
     if not isinstance(value, dict) or set(value) != fields:

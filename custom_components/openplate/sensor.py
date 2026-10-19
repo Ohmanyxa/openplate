@@ -13,35 +13,37 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:  # type: i
     async_add_entities(
         [
             OpenPlateLastPlateSensor(manager),
-            *(OpenPlateGarageSensor(manager, key) for key in manager.garage_instances),
+            *(OpenPlateDirectionSensor(manager, plate) for plate in manager.plates),
         ]
     )
 
 
-class OpenPlateGarageSensor(OpenPlateEntity, SensorEntity):
-    """Last confirmed travel direction; not the physical door position."""
+class OpenPlateDirectionSensor(OpenPlateEntity, SensorEntity):
+    """Camera-relative motion for one registered plate, never a door command."""
 
-    _attr_icon = "mdi:garage"
+    _attr_icon = "mdi:car-arrow-left"
     _attr_device_class = "enum"
-    _attr_options = ["unknown", "arrival", "departure"]
+    _attr_options = ["unknown", "stationary", "arrival", "departure"]
 
-    def __init__(self, manager, key) -> None:  # type: ignore[no-untyped-def]
+    def __init__(self, manager, plate: str) -> None:  # type: ignore[no-untyped-def]
         super().__init__(manager)
-        self.key = key
-        self._attr_name = f"{manager.garage_instances[key]['name']} movement"
-        self._attr_unique_id = f"{manager.config[CONF_DEVICE_ID]}_garage_{key}"
+        self.plate = plate
+        self._attr_name = f"{plate} direction"
+        self._attr_unique_id = f"{manager.config[CONF_DEVICE_ID]}_{plate}_direction"
 
     @property
     def native_value(self):  # type: ignore[no-untyped-def]
-        return self.manager.garage_states[self.key]["status"]
+        state = self.manager.presence[self.plate]
+        return state.direction if state.present else "unknown"
 
     @property
     def extra_state_attributes(self):  # type: ignore[no-untyped-def]
-        garage = self.manager.garage_instances[self.key]
+        state = self.manager.presence[self.plate]
         return {
-            **self.manager.garage_states[self.key],
-            "target": garage["target"],
-            "direct_control_enabled": garage["enabled"],
+            "plate": self.plate,
+            "display_name": self.manager.plates[self.plate],
+            "present": state.present,
+            "motion": state.motion,
         }
 
 

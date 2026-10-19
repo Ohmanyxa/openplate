@@ -143,3 +143,17 @@ class EncryptedDeviceTests(unittest.IsolatedAsyncioTestCase):
         response = await self.send(envelope)
         self.assertEqual(response.status, 400)
         self.assertNotIn("recognition_api_key", self.decrypt_response(response, envelope))
+
+    async def test_fresh_envelope_cannot_refresh_presence_with_stale_observation(self):
+        for timestamp in ("2000-01-01T00:00:00+00:00", "2026-01-01T00:00:00"):
+            envelope = self.envelope({**self.observation(), "timestamp": timestamp})
+            self.assertEqual((await self.send(envelope)).status, 400)
+        self.assertFalse(self.manager.presence["BTEST1"].present)
+
+    async def test_encrypted_umlaut_plate_is_distinct_from_ascii_identity(self):
+        self.config["plates"] = "MÜAB12=Umlaut\nMUAB12=ASCII"
+        self.manager = self.new_manager()
+        payload = {**self.observation(), "plate": "MÜAB12"}
+        self.assertEqual((await self.send(self.envelope(payload))).status, 200)
+        self.assertTrue(self.manager.presence["MÜAB12"].present)
+        self.assertFalse(self.manager.presence["MUAB12"].present)

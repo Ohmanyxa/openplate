@@ -1,6 +1,5 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 from custom_components.openplate import OpenPlateManager
 from custom_components.openplate.config_flow import OpenPlateOptionsFlow
@@ -26,33 +25,11 @@ class GarageMotionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(normalize_plate("mu\u0308-ab 12"), "MÜAB12")
         self.assertNotEqual(normalize_plate("MÜAB12"), normalize_plate("MUAB12"))
         manager = OpenPlateManager(None, SimpleNamespace(data=self.config, options={}))
-        self.assertNotIn("NOTKNOWN", manager.garages)
         manager.process_observation({"plate": "BTEST1"}, 100)
-        self.assertEqual(manager.last_event["garage_entity_id"], "cover.garage")
+        self.assertIsNone(manager.last_event["garage_entity_id"])
         manager.process_observation({"plate": "OTHER"}, 101)
         self.assertIsNone(manager.last_event["garage_entity_id"])
         self.assertEqual(parse_plates("MÜAB12=One\nMUAB12=Two"), {"MÜAB12": "One", "MUAB12": "Two"})
-
-    async def test_assign_and_remove_cover_without_calling_a_service(self):
-        flow = TestGarageFlow()
-        flow.test_entry = SimpleNamespace(data=self.config, options={})
-        flow.hass = Mock()
-        flow.hass.states.get.side_effect = lambda entity: (
-            Mock() if entity == "cover.garage" else None
-        )
-        flow.async_show_form = Mock(side_effect=lambda **kwargs: kwargs)
-        flow.async_create_entry = Mock(side_effect=lambda **kwargs: kwargs)
-        initial = await flow.async_step_garages()
-        self.assertEqual(initial["step_id"], "garages")
-        form = await flow.async_step_garages({"plate": "BTEST1"})
-        self.assertEqual(form["step_id"], "garage")
-        result = await flow.async_step_garage({"garage_entity_id": "cover.garage"})
-        self.assertEqual(result["data"]["plate_garages"]["BTEST1"], "cover.garage")
-        removed = await flow.async_step_garage({"remove_assignment": True})
-        self.assertNotIn("BTEST1", removed["data"]["plate_garages"])
-        rejected = await flow.async_step_garage({"garage_entity_id": "switch.dangerous"})
-        self.assertIn("garage_entity_id", rejected["errors"])
-        flow.hass.services.async_call.assert_not_called()
 
     def test_motion_bounds_and_finite_numbers(self):
         motion = {

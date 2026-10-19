@@ -69,8 +69,17 @@ can still mimic depth motion. Test empirically; do not authorize a door from thi
 
 Only the small motion metadata is sent, encrypted, if HA advertises `motion_v1`. With an older HA
 integration, the new app keeps sending the old observation shape. Upgrade HA before field testing.
-The CCT model still cannot output umlauts. Registration preserves them rather than making unsafe
-automatic aliases; this change does not add umlaut recognition to the model.
+The CCT model itself still has no umlaut classes. A local Apple Vision `de-DE` recheck now reads
+the original high-resolution plate crop whenever the CCT output contains A/O/U. An Ä/Ö/Ü reading
+is accepted only at Vision confidence ≥0.8 and when its base characters exactly match the CCT
+result; the lower confidence is used. Ambiguous matches or errors keep the original model reading.
+No registered plate list or dictionary is used to invent a match. This adds another local OCR pass
+and needs temperature/latency testing on the mounted iPhone. Frames still never leave the phone.
+It is not a guarantee that every umlaut will be read; dots can be missed by both OCR engines.
+Pure merge tests cover all three umlauts; rendered-text Vision checks are synthetic, not a real-plate
+accuracy benchmark. The iOS runtime tests remain unverified in this change because disk exhaustion
+prevented the simulator build. The same Vision methods were exercised on macOS with synthetic
+MÜ/BÖ/SÄK strings. HA maps growing/shrinking plate size to `arrival`/`departure`.
 
 ## Development
 

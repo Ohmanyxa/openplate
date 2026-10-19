@@ -38,8 +38,8 @@ class PlateMotion {
     'span_seconds': spanSeconds,
   };
   String get label => switch (direction) {
-    'approaching' => 'Annäherung (Schätzung)',
-    'receding' => 'Entfernung (Schätzung)',
+    'approaching' => 'arrival · zur Kamera (Schätzung)',
+    'receding' => 'departure · von der Kamera weg (Schätzung)',
     'stationary' => 'Stationär (Schätzung)',
     _ => 'Richtung unbekannt',
   };

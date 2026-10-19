@@ -32,44 +32,45 @@ stores configuration in its normal configuration-entry storage; protect the host
 Camera frames are never sent to HA or a recognition server.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
-contains dedicated screens for registered plates, recognition, HA address, iPhone pairing and timeout. Starting a
+has three entries: Manage plates, Pair an iPhone, and Camera and connection.
+Each plate is edited in its own form with separate plate and display-name fields. No spaces,
+hyphens or PLATE=Name syntax are needed. Camera and connection contains recognition, HA URL and timeout. Starting a
 new pairing generates a new signing key; scan the code before confirming it because the previous app
 key stops working after confirmation.
 
 The integration creates:
 
 - a last-plate sensor with confidence and registration metadata;
-- one `recently seen` binary sensor per configured plate;
-- an event entity emitting `recognized`, `appeared` and `disappeared`.
+- one detected binary sensor per configured plate (`on` / `off`, internally true / false);
+- one direction enum sensor per plate: `arrival`, `departure`, `stationary`, `unknown`;
+- an event entity emitting `recognized`, `appeared`, `disappeared`, `arrival`, `departure`.
 
 `disappeared` means the plate was no longer observed before the configured timeout. It does **not**
 prove that a vehicle left the garage. Do not close a door based on that event alone.
 
 ## Automation boundary
 
-### Per-plate garage assignment and motion (development worktree)
+### Per-plate presence and direction
 
-Under **Configure → Assign plates to garage doors**, select a registered plate, then an existing
-`cover.*` entity. Choose “Remove current assignment” to clear it. A cover selector permits custom
-garage integrations that do not declare a garage device class; select the intended garage door.
-This is an association only: the integration calls no door services and creates no automation.
+Plate size growing consistently means `arrival` (towards the camera); shrinking means
+`departure` (away from the camera). At least four frames over two seconds are required.
+Changing position alone does not imply arrival/departure. Stationary or uncertain estimates have
+their own states. Presence returns to off after the configured not-seen timeout, and direction to
+unknown. Direction describes the most recent processed observation, not a continuously verified state.
 
-`garage_entity_id` is attached to recognition/appearance/disappearance events and the per-plate
-presence sensor. Assignment is server-owned; observations cannot supply/override the target cover.
-New clients optionally send validated `motion` metadata: `direction` (`approaching`, `receding`,
-`stationary`, `unknown`), normalized image-plane `dx`/`dy`, relative `scale_rate`, sample count and
-time span. Each presence sensor exposes `direction` and `motion`, resetting to unknown on absence.
-These are fixed-camera optical estimates, not a calibrated 3D velocity or safety sensor. Missing
-motion from an older app is unknown. Do not interpret unknown as departure or act on timeout alone.
-Direction is the last observed estimate, not a continuously verified current state. Initial plate
-confirmation may precede the fourth frame needed for motion: an `off → on` presence trigger with an
-approach condition can therefore miss it. For logging/testing, watch later `recognized` events or
-the `direction` attribute transition; do not turn this into a door action without additional safeguards.
+The integration calls **no cover/switch services**, even if old saved garage options are enabled.
+Garage/action menus and garage movement sensors have been retired. Existing registered plates,
+pairings and presence unique IDs are retained. Deleted plate entities are removed from the registry.
+Old garage settings remain stored but are ignored; move any desired actions into HA automations.
 
-Umlauts are now preserved in registered identities: `MÜ`, `MU` and `M` are distinct. Existing ASCII
-IDs are unchanged; review old umlaut entity IDs/automations after upgrading. The deployed model still
-has no umlaut output classes. Registering `MÜ` does not make an OCR result `MU` authorized.
-See the [security review](../../docs/SECURITY_REVIEW_2026-10-19.md) before automatic door control.
+Missing motion from older apps is unknown. Presence may turn on before the fourth frame needed for
+direction: trigger on the direction sensor transition, not only presence off → on.
+Camera-relative direction is not necessarily arrival at a property if the camera faces the other way.
+Umlauts remain exact identities: `MÜ` and `MU` are never aliases. The new iPhone build uses a
+local Vision crop recheck because the CCT alphabet has no umlaut classes. Vision must read the
+umlaut and agree on every other character; registration never substitutes it. Accuracy still depends
+on actual images. See [setup and automation guidance](../../docs/GARAGES.md) and the
+[security review](../../docs/SECURITY_REVIEW_2026-10-19.md).
 
 A conservative opening automation can use a registered plate sensor only as one condition among
 several. Entity IDs must be adapted to the names created in your instance:
@@ -78,9 +79,8 @@ several. Entity IDs must be adapted to the names created in your instance:
 alias: Open garage for recognized family car
 triggers:
   - trigger: state
-    entity_id: binary_sensor.family_car_recently_seen
-    from: "off"
-    to: "on"
+    entity_id: sensor.mueab123_direction
+    to: "arrival"
 conditions:
   - condition: state
     entity_id: person.owner
@@ -115,16 +115,6 @@ the QR from a trusted HA interface. The protocol has not received an independent
 Possession of the paired key authenticates observations, not their camera provenance. A compromised
 phone/key or a copied physical plate remains outside that guarantee. A plate match alone must not
 authorize a garage door.
-
-## Garages with built-in actions
-
-Configure → **Garages and direct control** creates named garages with multiple
-registered plates, an existing cover/switch, camera orientation and separate
-`arrival` / `departure` actions. Direct control is off by default and requires
-explicit opt-in. Each garage gets a movement sensor; no user automation is needed.
-See [setup, action limits and safety requirements](../../docs/GARAGES.md).
-Do not use plate matching as secure vehicle authentication or direction as proof
-that the doorway is clear. Independent door safety sensors remain essential.
 
 ## Pairing regression tests
 

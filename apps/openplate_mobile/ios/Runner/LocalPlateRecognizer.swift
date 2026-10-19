@@ -1,6 +1,7 @@
 import CryptoKit
 import Flutter
 import Foundation
+import Vision
 import onnxruntime_objc
 
 /// All tensors, crops and model execution stay in this process. No frame networking.
@@ -24,7 +25,7 @@ final class LocalPlateRecognizer: NSObject, FlutterPlugin {
           worker.async {
             do {
               try self.loadModels(paths)
-              DispatchQueue.main.async { result("ONNX Runtime · iPhone CPU") }
+              DispatchQueue.main.async { result("ONNX Runtime · iPhone CPU + lokale Vision-Umlautprüfung") }
             } catch { self.fail(result, code: "model_initialization", error: error) }
           }
         } catch { self.fail(result, code: "model_download", error: error) }
@@ -104,12 +105,70 @@ final class LocalPlateRecognizer: NSObject, FlutterPlugin {
         throw LocalInferenceError.contract
       }
       if let decoded = try Self.decodePlate(Self.floats(plate)) {
-        readings.append(["plate": decoded.text, "confidence": decoded.confidence,
+        let reading = refineGermanUmlauts(decoded, frame: frame,
+          rect: CGRect(x: x1, y: y1, width: x2 - x1, height: y2 - y1))
+        readings.append(["plate": reading.text, "confidence": reading.confidence,
           "box": [Double(x1) / Double(frame.width), Double(y1) / Double(frame.height),
                   Double(x2 - x1) / Double(frame.width), Double(y2 - y1) / Double(frame.height)]])
       }
     }
     return readings
+  }
+
+  /// The CCT alphabet has no Ä/Ö/Ü. Read the original crop with a second LOCAL
+  /// engine rather than guessing umlauts from the list of registered plates.
+  private func refineGermanUmlauts(_ decoded: (text: String, confidence: Double),
+                                   frame: BgraVideoFrame, rect: CGRect)
+    -> (text: String, confidence: Double) {
+    guard decoded.text.contains(where: { "AOU".contains($0) }),
+          let image = frame.plateImage(rect) else { return decoded }
+    guard let candidates = try? Self.germanTextCandidates(image) else { return decoded }
+    return Self.mergeUmlautReading(decoded, candidates: candidates)
+  }
+
+  static func germanTextCandidates(_ image: CGImage) throws -> [(text: String, confidence: Double)] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    let languages = try request.supportedRecognitionLanguages()
+    guard languages.contains("de-DE") else { return [] }
+    request.recognitionLanguages = ["de-DE"]
+    request.minimumTextHeight = 0.15
+    try VNImageRequestHandler(cgImage: image, orientation: .up).perform([request])
+    let observations = (request.results ?? []).sorted { $0.boundingBox.minX < $1.boundingBox.minX }
+    let readings = observations.compactMap { observation -> (text: String, confidence: Double)? in
+      guard let best = observation.topCandidates(1).first else { return nil }
+      return (best.string, Double(best.confidence))
+    }
+    // Vision may split a single-line plate at the seals. Join only aligned text,
+    // without manufacturing candidates from arbitrary alternative combinations.
+    var candidates = readings
+    if observations.count > 1, observations.count <= 4,
+       let first = observations.first,
+       observations.allSatisfy({ abs($0.boundingBox.midY - first.boundingBox.midY) < 0.15 }) {
+      candidates.append((readings.map { $0.text }.joined(),
+                         readings.map { $0.confidence }.min() ?? 0))
+    }
+    return candidates
+  }
+
+  static func mergeUmlautReading(_ decoded: (text: String, confidence: Double),
+                                candidates: [(text: String, confidence: Double)])
+    -> (text: String, confidence: Double) {
+    var matches: [String: Double] = [:]
+    for candidate in candidates where candidate.confidence.isFinite && candidate.confidence >= 0.8 {
+      // Reject other glyphs, not silently turn e.g. À into Ä or drop a letter.
+      let text = candidate.text.precomposedStringWithCanonicalMapping.uppercased()
+      guard text.allSatisfy({ "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÜ0123456789 -".contains($0) }) else { continue }
+      let normalized = text.filter { $0 != " " && $0 != "-" }
+      guard normalized.contains(where: { "ÄÖÜ".contains($0) }) else { continue }
+      let base = normalized.replacingOccurrences(of: "Ä", with: "A")
+        .replacingOccurrences(of: "Ö", with: "O").replacingOccurrences(of: "Ü", with: "U")
+      guard base == decoded.text else { continue }
+      matches[normalized] = max(matches[normalized] ?? 0, candidate.confidence)
+    }
+    guard matches.count == 1, let match = matches.first else { return decoded }
+    return (match.key, min(decoded.confidence, match.value))
   }
 
   static func floats(_ value: ORTValue) throws -> [Float] {
@@ -204,6 +263,19 @@ struct BgraVideoFrame {
   let width: Int
   let height: Int
   let stride: Int
+
+  func plateImage(_ rect: CGRect) -> CGImage? {
+    guard let provider = CGDataProvider(data: bytes as CFData),
+          let image = CGImage(width: width, height: height, bitsPerComponent: 8,
+            bitsPerPixel: 32, bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGBitmapInfo.byteOrder32Little.rawValue |
+              CGImageAlphaInfo.noneSkipFirst.rawValue), provider: provider,
+            decode: nil, shouldInterpolate: false, intent: .defaultIntent) else { return nil }
+    // Keep dots near the upper edge. Original pixels, not the 128x64 CCT input.
+    let expanded = rect.insetBy(dx: -rect.width * 0.02, dy: -rect.height * 0.12)
+      .intersection(CGRect(x: 0, y: 0, width: width, height: height)).integral
+    return image.cropping(to: expanded)
+  }
 
   // OpenCV-style bilinear pixel-centre sampling, RGB output, row-stride aware.
   func rgbResized(x: Int, y: Int, width cropWidth: Int, height cropHeight: Int,

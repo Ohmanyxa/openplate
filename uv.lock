@@ -497,7 +497,7 @@ wheels = [
 
 [[package]]
 name = "openplate"
-version = "0.9.0"
+version = "0.9.1"
 source = { editable = "." }
 dependencies = [
     { name = "fast-alpr", extra = ["onnx"] },

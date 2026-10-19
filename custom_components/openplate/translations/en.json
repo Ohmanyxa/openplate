@@ -30,25 +30,18 @@
     "step": {
       "init": {
         "title": "Manage OpenPlate",
-        "description": "Choose what you want to configure.",
+        "description": "Each plate has presence and direction sensors. Use Home Assistant automations to control doors and switches.",
         "menu_options": {
+          "plates": "Manage plates",
           "pairing": "Pair an iPhone",
-          "plates": "Manage registered plates",
-          "recognition": "On-device recognition",
-          "connection": "Change Home Assistant address",
-          "advanced": "Advanced settings",
-          "garages": "Assign plates to garage doors",
-          "garage_instances": "Garages and direct control"
+          "settings": "Camera and connection"
         }
       },
       "plates": {
-        "title": "Registered plates",
-        "description": "Add, rename or remove plates. Changes apply after submitting.",
+        "title": "Manage plates",
+        "description": "Choose Add plate or an existing plate to edit. Each plate has separate input fields and its own sensors.",
         "data": {
-          "plates": "Registered plates"
-        },
-        "data_description": {
-          "plates": "One plate per line as PLATE=Display name. Spaces and hyphens are normalized."
+          "plate": "Select plate"
         }
       },
       "pairing": {
@@ -97,50 +90,42 @@
           "absence_timeout": "How long a registered plate remains recently seen."
         }
       },
-      "garages": {
-        "title": "Select a plate",
-        "data": {
-          "plate": "Plate"
+      "settings": {
+        "title": "Camera and connection",
+        "menu_options": {
+          "recognition": "On-device recognition",
+          "connection": "Home Assistant address",
+          "advanced": "Presence timeout"
         }
       },
-      "garage": {
-        "title": "Garage door for {plate}",
-        "description": "Assignment adds metadata to events and sensors. It never opens or closes a door automatically. Directions are estimates only.",
+      "plate": {
+        "title": "Edit plate",
+        "description": "Enter the plate without spaces or hyphens, e.g. MÜAB123. Enter a display name separately; no PLATE=Name syntax is needed. Ä, Ö and Ü remain distinct from A, O and U.",
         "data": {
-          "garage_entity_id": "Garage door (cover entity)",
-          "remove_assignment": "Remove current assignment"
-        }
-      },
-      "garage_instances": {
-        "title": "Add or edit a garage",
-        "data": {
-          "garage_id": "Garage"
-        }
-      },
-      "garage_instance": {
-        "title": "Configure garage",
-        "description": "Assign plates and a cover or switch. approaching = plate grows; receding = shrinks. Use open/close for covers, on/off for switches; none does nothing. Direct control is optional: plates can be copied and direction is an estimate. Enable only with independent door safety sensors! departure does NOT prove the doorway is clear. Switches must provide actual on/off control, not toggle/pulse door relays. Actions have a minimum 60-second cooldown. The sensor reports last movement, not door position.",
-        "data": {
-          "name": "Name",
-          "plates": "Assigned plates",
-          "target": "Door or switch",
-          "arrival_direction": "Camera direction for arrival",
-          "arrival_action": "Action on arrival",
-          "departure_action": "Action on departure",
-          "enabled": "Enable direct control – I understand the risks",
-          "remove": "Delete this garage"
+          "plate": "Plate",
+          "display_name": "Display name",
+          "remove": "Delete this plate"
+        },
+        "data_description": {
+          "plate": "No spaces, e.g. BAB123 or MÜAB123."
         }
       }
     },
     "error": {
       "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
-      "unknown_plate": "Plate is not registered.",
-      "invalid_garage": "Select an existing cover entity.",
-      "invalid_garage_instance": "Check name, registered plates and available target. cover allows none/open/close; switch allows none/on/off."
+      "invalid_plate": "Enter a plate of at most 10 letters/digits; Ä/Ö/Ü are supported.",
+      "duplicate_plate": "This plate is already registered.",
+      "invalid_display_name": "Enter a display name without line breaks or equals signs."
     },
     "abort": {
-      "pairing_expired": "Pairing is no longer available. Generate a new QR code.",
-      "no_registered_plates": "Register plates first."
+      "pairing_expired": "Pairing is no longer available. Generate a new QR code."
+    }
+  },
+  "selector": {
+    "registered_plate": {
+      "options": {
+        "__new__": "＋ Add plate"
+      }
     }
   }
 }

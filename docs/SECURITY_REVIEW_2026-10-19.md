@@ -29,7 +29,13 @@ Für sicherheitsrelevanten Einsatz QR über eine vertrauenswürdige HTTPS-HA-Obe
 das Heimnetz absichern. Alternativ ist ein separat verifizierter Fingerabdruck/Out-of-band-Abgleich
 nötig; dieser ist derzeit nicht implementiert. Niemals eine Zertifikatswarnung ignorieren.
 
-### Mittel: Alter der Beobachtung wird serverseitig nicht erzwungen — reproduziert, offen
+### Mittel: Alter der Beobachtung — ursprünglicher Befund, inzwischen begrenzt
+
+Nachtrag zur Sensor-Umstellung: Der Server verlangt jetzt eine Zeitzone und höchstens
+90 Sekunden Differenz zur HA-Uhr, auch bei frischer verschlüsselter Hülle. Ein Regressionstest
+weist die alte Beobachtung sowie Zeitstempel ohne Zeitzone mit HTTP 400 zurück. Die folgenden
+Absätze dokumentieren den ursprünglichen Befund. Diese Begrenzung ist keine Echtzeit- oder
+Fahrzeugauthentifizierungsgarantie; für Automationen weiterhin zusätzliche Bedingungen verwenden.
 
 `OpenPlateManager._validate_payload()` parst `payload.timestamp`, prüft aber nicht dessen Alter oder
 Zeitzone. Das 90-Sekunden-Fenster in `encryption.unseal()` gilt nur für die äußere Nachrichtenhülle.
