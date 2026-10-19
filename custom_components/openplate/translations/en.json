@@ -36,7 +36,8 @@
           "plates": "Manage registered plates",
           "recognition": "On-device recognition",
           "connection": "Change Home Assistant address",
-          "advanced": "Advanced settings"
+          "advanced": "Advanced settings",
+          "garages": "Assign plates to garage doors"
         }
       },
       "plates": {
@@ -94,13 +95,30 @@
         "data_description": {
           "absence_timeout": "How long a registered plate remains recently seen."
         }
+      },
+      "garages": {
+        "title": "Select a plate",
+        "data": {
+          "plate": "Plate"
+        }
+      },
+      "garage": {
+        "title": "Garage door for {plate}",
+        "description": "Assignment adds metadata to events and sensors. It never opens or closes a door automatically. Directions are estimates only.",
+        "data": {
+          "garage_entity_id": "Garage door (cover entity)",
+          "remove_assignment": "Remove current assignment"
+        }
       }
     },
     "error": {
-      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments."
+      "invalid_ha_url": "Enter a local HTTP or HTTPS address without credentials, query parameters or fragments.",
+      "unknown_plate": "Plate is not registered.",
+      "invalid_garage": "Select an existing cover entity."
     },
     "abort": {
-      "pairing_expired": "Pairing is no longer available. Generate a new QR code."
+      "pairing_expired": "Pairing is no longer available. Generate a new QR code.",
+      "no_registered_plates": "Register plates first."
     }
   }
 }

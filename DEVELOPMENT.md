@@ -1,5 +1,13 @@
 # Development
 
+## Releases
+
+Release-Vorschau: `python3 scripts/release.py 0.8.0`. Veröffentlichung mit `--publish`, bewusstes
+Mitnehmen aller uncommitteten Änderungen zusätzlich mit `--include-working-tree`.
+Das Skript erhöht die vier Versionsfelder und die iPhone-Buildnummer, führt Tests/Build aus und wartet
+vor Tag/GitHub-Release auf erfolgreiche CI- und HACS-Prüfungen. Details und Wiederaufnahme nach
+Abbrüchen: [Release-Anleitung](docs/RELEASING.md).
+
 ## Environment
 
 The project uses Python 3.10–3.13. Python 3.12 is the recommended common denominator for macOS and

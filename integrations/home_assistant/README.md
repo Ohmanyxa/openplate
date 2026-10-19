@@ -47,6 +47,30 @@ prove that a vehicle left the garage. Do not close a door based on that event al
 
 ## Automation boundary
 
+### Per-plate garage assignment and motion (development worktree)
+
+Under **Configure → Assign plates to garage doors**, select a registered plate, then an existing
+`cover.*` entity. Choose “Remove current assignment” to clear it. A cover selector permits custom
+garage integrations that do not declare a garage device class; select the intended garage door.
+This is an association only: the integration calls no door services and creates no automation.
+
+`garage_entity_id` is attached to recognition/appearance/disappearance events and the per-plate
+presence sensor. Assignment is server-owned; observations cannot supply/override the target cover.
+New clients optionally send validated `motion` metadata: `direction` (`approaching`, `receding`,
+`stationary`, `unknown`), normalized image-plane `dx`/`dy`, relative `scale_rate`, sample count and
+time span. Each presence sensor exposes `direction` and `motion`, resetting to unknown on absence.
+These are fixed-camera optical estimates, not a calibrated 3D velocity or safety sensor. Missing
+motion from an older app is unknown. Do not interpret unknown as departure or act on timeout alone.
+Direction is the last observed estimate, not a continuously verified current state. Initial plate
+confirmation may precede the fourth frame needed for motion: an `off → on` presence trigger with an
+approach condition can therefore miss it. For logging/testing, watch later `recognized` events or
+the `direction` attribute transition; do not turn this into a door action without additional safeguards.
+
+Umlauts are now preserved in registered identities: `MÜ`, `MU` and `M` are distinct. Existing ASCII
+IDs are unchanged; review old umlaut entity IDs/automations after upgrading. The deployed model still
+has no umlaut output classes. Registering `MÜ` does not make an OCR result `MU` authorized.
+See the [security review](../../docs/SECURITY_REVIEW_2026-10-19.md) before automatic door control.
+
 A conservative opening automation can use a registered plate sensor only as one condition among
 several. Entity IDs must be adapted to the names created in your instance:
 

@@ -57,6 +57,21 @@ unverified suggestion, not a discovered address.
 After pairing, the help screen displays a selectable, copyable Home Assistant base URL, excluding
 the private webhook ID and query parameters. Help is also available from connection settings.
 
+## Motion estimates (development worktree)
+
+The iPhone retains normalized detection boxes locally. A bounded per-plate history estimates centre
+velocity (`dx`, `dy`, image widths/heights per second) and relative linear scale rate (`scale_rate`,
+per second), then labels approaching/receding/stationary/unknown. This is optical expansion, not
+metric 3D velocity. At least four frames spanning two seconds are needed. Clipped boxes, large
+association jumps, gaps, duplicate plate identities, pose changes and lifecycle/resolution changes
+invalidate the estimate. A fixed mount and unchanged zoom are prerequisites; zoom/camera/plate pose
+can still mimic depth motion. Test empirically; do not authorize a door from this signal alone.
+
+Only the small motion metadata is sent, encrypted, if HA advertises `motion_v1`. With an older HA
+integration, the new app keeps sending the old observation shape. Upgrade HA before field testing.
+The CCT model still cannot output umlauts. Registration preserves them rather than making unsafe
+automatic aliases; this change does not add umlaut recognition to the model.
+
 ## Development
 
 ```bash

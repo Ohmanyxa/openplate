@@ -26,4 +26,10 @@ class OpenPlatePresenceSensor(OpenPlateEntity, BinarySensorEntity):
 
     @property
     def extra_state_attributes(self):  # type: ignore[no-untyped-def]
-        return {"plate": self.plate}
+        motion = self.manager.presence[self.plate].motion
+        return {
+            "plate": self.plate,
+            "garage_entity_id": self.manager.garages.get(self.plate),
+            "motion": motion,
+            "direction": motion.get("direction", "unknown") if motion else "unknown",
+        }

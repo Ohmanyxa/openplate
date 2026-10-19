@@ -18,6 +18,7 @@ def mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
     return {
         "device_id": configuration[CONF_DEVICE_ID],
         "recognition_mode": "on_device",
+        "capabilities": ["motion_v1"],
         # Empty legacy keys keep previously paired apps/config readers compatible.
         "recognition_url": "",
         "recognition_api_key": "",

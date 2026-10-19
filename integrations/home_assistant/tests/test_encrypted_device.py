@@ -80,6 +80,24 @@ class EncryptedDeviceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status, 400)
         self.assertIsNone(self.manager.last_event)
 
+    async def test_motion_is_metadata_not_permission_to_choose_a_door(self):
+        motion = {
+            "direction": "approaching",
+            "dx": 0.01,
+            "dy": 0,
+            "scale_rate": 0.08,
+            "samples": 4,
+            "span_seconds": 3,
+        }
+        payload = {**self.observation(), "motion": motion, "garage_entity_id": "cover.attacker"}
+        self.assertEqual((await self.send(self.envelope(payload))).status, 400)
+        payload.pop("garage_entity_id")
+        self.assertEqual((await self.send(self.envelope(payload))).status, 200)
+        self.assertEqual(self.manager.last_event["motion"], motion)
+        self.assertIsNone(self.manager.last_event["garage_entity_id"])
+        bad = {**payload, "event_id": "bad-motion", "motion": {**motion, "dx": float("inf")}}
+        self.assertEqual((await self.send(self.envelope(bad))).status, 400)
+
     async def test_valid_events_are_processed_once_and_replay_is_encrypted_rejection(self):
         notifications = []
         self.manager.subscribe(lambda event_type, data: notifications.append(event_type))

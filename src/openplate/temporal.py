@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import deque
 from dataclasses import dataclass
 
 from openplate.domain import PlateResult
 
-_NOT_ALNUM = re.compile(r"[^A-Z0-9]")
+_NOT_ALNUM = re.compile(r"[^A-ZÄÖÜ0-9]")
 
 
 def normalize_plate(value: str) -> str:
-    return _NOT_ALNUM.sub("", value.upper())
+    return _NOT_ALNUM.sub("", unicodedata.normalize("NFC", value).upper())
 
 
 @dataclass(frozen=True, slots=True)

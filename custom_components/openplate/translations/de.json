@@ -36,7 +36,8 @@
           "plates": "Kennzeichen verwalten",
           "recognition": "Lokale Erkennung",
           "connection": "Home-Assistant-Adresse ändern",
-          "advanced": "Erweiterte Einstellungen"
+          "advanced": "Erweiterte Einstellungen",
+          "garages": "Kennzeichen einem Tor zuordnen"
         }
       },
       "plates": {
@@ -94,13 +95,30 @@
         "data_description": {
           "absence_timeout": "So lange bleibt ein registriertes Kennzeichen als kürzlich gesehen aktiv."
         }
+      },
+      "garages": {
+        "title": "Kennzeichen auswählen",
+        "data": {
+          "plate": "Kennzeichen"
+        }
+      },
+      "garage": {
+        "title": "Tor für {plate}",
+        "description": "Die Zuordnung ergänzt Ereignisse und Sensoren. Sie öffnet oder schließt kein Tor automatisch. Richtungswerte sind nur Schätzungen.",
+        "data": {
+          "garage_entity_id": "Garagentor (Cover-Entität)",
+          "remove_assignment": "Vorhandene Zuordnung entfernen"
+        }
       }
     },
     "error": {
-      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein."
+      "invalid_ha_url": "Gib eine lokale HTTP-Adresse oder eine HTTPS-Adresse ohne Zugangsdaten, Abfrageparameter oder Seitenfragment ein.",
+      "unknown_plate": "Kennzeichen ist nicht registriert.",
+      "invalid_garage": "Eine vorhandene Cover-Entität auswählen."
     },
     "abort": {
-      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code."
+      "pairing_expired": "Die Kopplung ist nicht mehr verfügbar. Erstelle einen neuen QR-Code.",
+      "no_registered_plates": "Bitte zuerst Kennzeichen registrieren."
     }
   }
 }

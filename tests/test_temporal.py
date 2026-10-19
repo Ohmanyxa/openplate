@@ -13,6 +13,8 @@ def _result(text: str, confidence: float = 0.9) -> PlateResult:
 
 def test_normalize_plate() -> None:
     assert normalize_plate(" b-ab 12-3 ") == "BAB123"
+    assert normalize_plate(" mu\u0308-ab 12 ") == "MÜAB12"
+    assert normalize_plate("MÜAB12") != normalize_plate("MUAB12")
 
 
 def test_temporal_confirmation_emits_only_one_new_event_until_reset() -> None:

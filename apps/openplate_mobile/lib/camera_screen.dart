@@ -10,6 +10,8 @@ import 'openplate_api.dart';
 import 'settings.dart';
 import 'video_frame.dart';
 import 'local_recognition.dart';
+import 'plate_identity.dart';
+import 'plate_motion.dart';
 
 /// Frames never leave the device. Only confirmed strings go to paired HA.
 class CameraScreen extends StatefulWidget {
@@ -41,6 +43,9 @@ class _CameraScreenState extends State<CameraScreen>
   late final LocalPlateRecognizer _local =
       widget.recognizer ?? LocalPlateRecognizer();
   final _confirmation = LocalTemporalConfirmation();
+  final _motion = PlateMotionTracker();
+  (int, int)? _motionFrameSize;
+  String _motionStatus = 'Richtung unbekannt';
   bool _startingRecognition = false;
   bool _modelsReady = false;
   bool _sendingEvents = false;
@@ -97,6 +102,7 @@ class _CameraScreenState extends State<CameraScreen>
     final generation = ++_generation;
     _processingEpoch++;
     _confirmation.reset();
+    _motion.reset();
     _pendingEvents.clear();
     _lastFrame = null;
     _cameraTask = _cameraTask.then((_) async {
@@ -203,6 +209,8 @@ class _CameraScreenState extends State<CameraScreen>
   void _resetFrameAdmission() {
     _processingEpoch++;
     _confirmation.reset();
+    _motion.reset();
+    _motionStatus = 'Richtung unbekannt';
     _pendingEvents.clear();
     _lastFrame = null;
   }
@@ -275,6 +283,7 @@ class _CameraScreenState extends State<CameraScreen>
     _busy = true;
     final generation = _generation;
     final epoch = _processingEpoch;
+    final frameReceiptAt = _videoClock.elapsed;
     try {
       final readings = await _local.recognize(frame);
       if (!mounted ||
@@ -289,6 +298,35 @@ class _CameraScreenState extends State<CameraScreen>
           ? null
           : '${readings.first.plate} (${(readings.first.confidence * 100).toStringAsFixed(0)} %)';
       final result = _confirmation.update(readings, _videoClock.elapsed);
+      final dimensions = (frame.width, frame.height);
+      if (_motionFrameSize != dimensions) {
+        _motion.reset();
+        _motionFrameSize = dimensions;
+      }
+      final counts = <String, int>{};
+      for (final reading in readings) {
+        final key = normalizePlate(reading.plate);
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      final movements = <String, PlateMotion>{};
+      final staleGeometry =
+          _videoClock.elapsed - frameReceiptAt > const Duration(seconds: 2);
+      if (staleGeometry) _motion.reset();
+      for (final reading in readings) {
+        final key = normalizePlate(reading.plate);
+        if (staleGeometry ||
+            counts[key] != 1 ||
+            !reading.confidence.isFinite ||
+            reading.confidence < .8) {
+          _motion.discard(key);
+          movements[key] = const PlateMotion();
+        } else {
+          movements[key] = _motion.update(key, reading.box, frameReceiptAt);
+        }
+      }
+      _motionStatus = movements.isEmpty
+          ? 'Richtung unbekannt'
+          : movements.values.first.label;
       for (final plate in result) {
         // Coalesce presence refreshes; never replay an outage as a queue of arrivals.
         _pendingEvents.removeWhere((event) => event.plate.plate == plate.plate);
@@ -297,7 +335,17 @@ class _CameraScreenState extends State<CameraScreen>
           _pendingEvents.removeAt(0);
           _droppedEvents++;
         }
-        _pendingEvents.add(PendingPlateEvent.fromPlate(plate));
+        _pendingEvents.add(
+          PendingPlateEvent.fromPlate(
+            ConfirmedPlate(
+              plate: plate.plate,
+              confidence: plate.confidence,
+              observations: plate.observations,
+              newEvent: plate.newEvent,
+              motion: movements[plate.plate] ?? const PlateMotion(),
+            ),
+          ),
+        );
         _lastPlate = plate.plate;
       }
       unawaited(_flushPending(api));
@@ -457,6 +505,7 @@ class _CameraScreenState extends State<CameraScreen>
                             Text(
                               'OCR-Rohwert (nicht automatisch bestätigt): $_rawReading',
                             ),
+                          Text(_motionStatus),
                           if (_blackMode)
                             const Text(
                               'Bedienung wird nach 8 Sekunden ausgeblendet.',

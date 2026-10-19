@@ -81,7 +81,9 @@ The app obtains it before delivering events, caches it while monitoring, and ref
 428 response. It also refreshes configuration periodically on the home screen.
 
 Plate observations use the existing v1 event payload plus `session_id`. HA validates the envelope,
-freshness, device ID, session, schema and replay ID before emitting events. Recorded observations from
+envelope freshness, device ID, session, schema and replay ID before emitting events. The observation
+timestamp itself is currently parsed but not age-limited; see the security review dated 2026-10-19.
+Recorded observations from
 an earlier HA runtime cannot pass the new session check. Exact request replays get an encrypted 409;
 the app makes a fresh envelope on retry and keeps the stable event ID. HA returns encrypted
 `{"accepted":true,"duplicate":true}` for already accepted event IDs in its current 90-second
@@ -91,6 +93,24 @@ returns only a generic plaintext error; the app treats that as a failure, never 
 Replay/event caches are in memory and bounded by time. Legitimate retries after server restart may
 be delivered again; this is not persistent exactly-once delivery. Session binding prevents a passive
 network recorder from doing that retry itself. Plate matching alone must not authorize physical access.
+
+## Optional motion metadata (development worktree)
+
+New HA configurations advertise `capabilities: ["motion_v1"]`. Only after authenticated negotiation
+does the app attach a `motion` object to a v1 observation. Without this capability it keeps the
+existing observation shape, allowing staged upgrades without plaintext or frame-upload fallback.
+
+```json
+{"direction":"approaching","dx":0.01,"dy":0.0,"scale_rate":0.08,"samples":4,"span_seconds":3.0}
+```
+
+Directions are `unknown`, `stationary`, `approaching` or `receding`. The vector is measured in image
+widths/heights per second; scale rate is a relative linear expansion rate per second, not metric depth
+velocity. Unknown estimates use null vector/rate values. HA rejects unknown motion fields, non-finite
+or out-of-bounds numbers, and classified estimates with insufficient sample count/time span.
+The metadata is still a client assertion, not a proof of motion or an instruction to control a door.
+`garage_entity_id` is derived only on HA from its registered-plate assignment and is not accepted
+from the phone. No bounding boxes or camera frames are transmitted.
 
 ## Transport and trust boundaries
 
@@ -108,5 +128,6 @@ Keep QR codes private. There is no forward secrecy if root keys or recorded QR k
 
 Existing HTTPS entries may temporarily accept old HMAC clients, but HTTP never accepts that plaintext
 path. Update both components and re-pair to rotate keys and enforce encrypted-only transport. Keys on
-iOS reside in Keychain; HA uses its normal host storage. This change neither provisions the separate
-recognition server nor replaces its required HTTPS protection for image uploads.
+iOS reside in Keychain; HA uses its normal host storage. Since v0.7.0 the mobile app performs inference
+locally and sends no images to a separate recognition server. The optional development/reference API
+is outside this mobile device channel.

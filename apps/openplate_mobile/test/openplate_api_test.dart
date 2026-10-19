@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:openplate_mobile/openplate_api.dart';
 import 'package:openplate_mobile/settings.dart';
 import 'package:openplate_mobile/encryption.dart';
+import 'package:openplate_mobile/plate_motion.dart';
 
 void main() {
   const paired = OpenPlateSettings(
@@ -21,6 +22,66 @@ void main() {
     expect(paired.isPaired, isTrue);
     expect(paired.isComplete, isTrue);
   });
+
+  test(
+    'motion is negotiated and never sent to an older HA integration',
+    () async {
+      for (final supported in [false, true]) {
+        Map<String, dynamic>? received;
+        final client = MockClient((request) async {
+          final envelope = jsonDecode(request.body) as Map<String, dynamic>;
+          final payload = await EncryptedTransport.unseal(
+            envelope,
+            paired.webhookSecret,
+            'device/request/test',
+          );
+          final configuration = payload['event_type'] == 'device.configuration';
+          if (!configuration) received = payload;
+          final reply = configuration
+              ? {
+                  'schema_version': 1,
+                  'device_id': paired.deviceId,
+                  'home_assistant_webhook_url': paired.homeAssistantWebhookUrl,
+                  'webhook_secret': paired.webhookSecret,
+                  'capture_interval_seconds': 1,
+                  'session_id': 'session-number-12345',
+                  if (supported) 'capabilities': ['motion_v1'],
+                }
+              : {'accepted': true};
+          return http.Response(
+            jsonEncode(
+              await EncryptedTransport.seal(
+                reply,
+                paired.webhookSecret,
+                'device/response/test/${envelope['id']}/200',
+              ),
+            ),
+            200,
+          );
+        });
+        await OpenPlateApi(paired, client: client).sendHomeAssistantEvent(
+          PendingPlateEvent.fromPlate(
+            const ConfirmedPlate(
+              plate: 'BTEST1',
+              confidence: .95,
+              observations: 4,
+              newEvent: true,
+              motion: PlateMotion(
+                direction: 'approaching',
+                dx: .01,
+                dy: 0,
+                scaleRate: .08,
+                samples: 4,
+                spanSeconds: 3,
+              ),
+            ),
+          ),
+        );
+        expect(received!.containsKey('motion'), supported);
+        if (supported) expect(received!['motion']['direction'], 'approaching');
+      }
+    },
+  );
 
   test(
     'retrieves later server settings through an authenticated request',

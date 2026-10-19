@@ -33,5 +33,7 @@ class OpenPlateLastPlateSensor(OpenPlateEntity, SensorEntity):
             "display_name": event.get("display_name"),
             "confidence": event.get("confidence"),
             "observations": event.get("observations"),
+            "garage_entity_id": event.get("garage_entity_id"),
+            "motion": event.get("motion"),
             "webhook_path": f"/api/webhook/{self.manager.entry.data[CONF_WEBHOOK_ID]}",
         }

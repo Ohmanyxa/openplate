@@ -33,32 +33,15 @@ from .const import (
 )
 from .encryption import seal, unseal
 from .pairing_webhook import async_ensure_pairing_gateway
+from .plates import normalize_plate, parse_plates
 from .security import valid_signature
-
-_NOT_ALNUM = re.compile(r"[^A-Z0-9]")
-
-
-def normalize_plate(value: str) -> str:
-    return _NOT_ALNUM.sub("", value.upper())
-
-
-def parse_plates(value: str) -> dict[str, str]:
-    plates: dict[str, str] = {}
-    for raw_line in value.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        plate, separator, name = line.partition("=")
-        normalized = normalize_plate(plate)
-        if normalized:
-            plates[normalized] = name.strip() if separator and name.strip() else normalized
-    return plates
 
 
 @dataclass
 class PlatePresence:
     last_seen: float = 0.0
     present: bool = False
+    motion: dict[str, Any] | None = None
 
 
 class OpenPlateManager:
@@ -67,6 +50,13 @@ class OpenPlateManager:
         self.entry = entry
         self.config = {**entry.data, **entry.options}
         self.plates = parse_plates(self.config[CONF_PLATES])
+        self.garages = {
+            plate: entity
+            for plate, entity in self.config.get("plate_garages", {}).items()
+            if plate in self.plates
+            and isinstance(entity, str)
+            and re.fullmatch(r"cover\.[a-z0-9_]+", entity)
+        }
         self.presence = {plate: PlatePresence() for plate in self.plates}
         self.last_event: dict[str, Any] | None = None
         self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
@@ -202,6 +192,7 @@ class OpenPlateManager:
             "confidence",
             "observations",
             "session_id",
+            "motion",
         }
         if not isinstance(payload, dict) or set(payload) - allowed:
             raise ValueError
@@ -212,7 +203,7 @@ class OpenPlateManager:
         if not isinstance(payload["event_id"], str) or not isinstance(payload["plate"], str):
             raise TypeError
         if not 1 <= len(payload["event_id"]) <= 128 or not re.fullmatch(
-            r"[A-Za-z0-9 -]{1,16}", payload["plate"]
+            r"[A-Za-zÄÖÜäöü0-9 -]{1,16}", payload["plate"]
         ):
             raise ValueError
         confidence = float(payload["confidence"])
@@ -220,6 +211,10 @@ class OpenPlateManager:
         if not 0 <= confidence <= 1 or observations < 1:
             raise ValueError
         datetime.fromisoformat(payload["timestamp"].replace("Z", "+00:00"))
+        if "motion" in payload:
+            from .motion import validate_motion
+
+            validate_motion(payload["motion"])
 
     @callback
     def process_observation(self, payload: dict[str, Any], now: float) -> None:
@@ -230,6 +225,7 @@ class OpenPlateManager:
             "plate": plate,
             "registered": registered,
             "display_name": self.plates.get(plate),
+            "garage_entity_id": self.garages.get(plate),
         }
         self.last_event = data
         self.notify("recognized", data)
@@ -239,6 +235,7 @@ class OpenPlateManager:
         was_present = state.present
         state.present = True
         state.last_seen = now
+        state.motion = data.get("motion")
         if not was_present:
             self.notify("appeared", data)
         self.notify("state", data)
@@ -250,11 +247,13 @@ class OpenPlateManager:
         for plate, state in self.presence.items():
             if state.present and current - state.last_seen >= timeout:
                 state.present = False
+                state.motion = None
                 data = {
                     "plate": plate,
                     "display_name": self.plates[plate],
                     "registered": True,
                     "device_id": self.config[CONF_DEVICE_ID],
+                    "garage_entity_id": self.garages.get(plate),
                 }
                 self.notify("disappeared", data)
                 self.notify("state", data)

@@ -50,6 +50,14 @@ class RunnerTests: XCTestCase {
       height: image.height, stride: image.width * 4))
     XCTAssertEqual(readings.compactMap { $0["plate"] as? String }, ["5AU5341"],
       "Native decoding must match the Python ONNX reference for this exact smoke image")
+    let boxes = readings.compactMap { $0["box"] as? [Double] }
+    XCTAssertEqual(boxes.count, readings.count)
+    for box in boxes {
+      XCTAssertEqual(box.count, 4)
+      XCTAssertTrue(box.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 1 })
+      XCTAssertLessThanOrEqual(box[0] + box[2], 1)
+      XCTAssertLessThanOrEqual(box[1] + box[3], 1)
+    }
     XCTAssertTrue(readings.allSatisfy { ($0["plate"] as? String)?.isEmpty == false })
   }
 

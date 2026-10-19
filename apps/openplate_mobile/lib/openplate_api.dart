@@ -8,6 +8,7 @@ import 'pairing.dart';
 import 'settings.dart';
 import 'encryption.dart';
 import 'connection_url.dart';
+import 'plate_motion.dart';
 
 class ConfirmedPlate {
   const ConfirmedPlate({
@@ -15,12 +16,14 @@ class ConfirmedPlate {
     required this.confidence,
     required this.observations,
     required this.newEvent,
+    this.motion,
   });
 
   final String plate;
   final double confidence;
   final int observations;
   final bool newEvent;
+  final PlateMotion? motion;
 
   factory ConfirmedPlate.fromJson(Map<String, dynamic> json) => ConfirmedPlate(
     plate: json['plate'] as String,
@@ -46,6 +49,7 @@ class OpenPlateApi {
   final OpenPlateSettings settings;
   final http.Client? _client;
   String? _sessionId;
+  bool _supportsMotion = false;
 
   Future<OpenPlateSettings> refreshConfiguration() async {
     final body = {
@@ -69,6 +73,11 @@ class OpenPlateApi {
       throw const FormatException('Ungültige Verbindungssitzung');
     }
     _sessionId = sessionId;
+    _supportsMotion =
+        (jsonDecode(response.body)['capabilities'] as List?)?.contains(
+          'motion_v1',
+        ) ??
+        false;
     return OpenPlateSettings.fromPairing(configuration);
   }
 
@@ -85,11 +94,14 @@ class OpenPlateApi {
       'confidence': plate.confidence,
       'observations': plate.observations,
       'session_id': _sessionId,
+      if (_supportsMotion && plate.motion != null)
+        'motion': plate.motion!.toJson(),
     };
     var response = await _encryptedPost(body);
     if (response.statusCode == 428) {
       await refreshConfiguration();
       body['session_id'] = _sessionId;
+      if (!_supportsMotion) body.remove('motion');
       response = await _encryptedPost(body);
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {

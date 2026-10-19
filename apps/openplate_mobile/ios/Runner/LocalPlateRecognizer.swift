@@ -104,7 +104,9 @@ final class LocalPlateRecognizer: NSObject, FlutterPlugin {
         throw LocalInferenceError.contract
       }
       if let decoded = try Self.decodePlate(Self.floats(plate)) {
-        readings.append(["plate": decoded.text, "confidence": decoded.confidence])
+        readings.append(["plate": decoded.text, "confidence": decoded.confidence,
+          "box": [Double(x1) / Double(frame.width), Double(y1) / Double(frame.height),
+                  Double(x2 - x1) / Double(frame.width), Double(y2 - y1) / Double(frame.height)]])
       }
     }
     return readings

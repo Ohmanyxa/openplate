@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 
 import 'openplate_api.dart';
 import 'video_frame.dart';
+import 'plate_identity.dart';
+import 'plate_motion.dart';
 
 class PlateObservation {
-  const PlateObservation(this.plate, this.confidence);
+  const PlateObservation(this.plate, this.confidence, {this.box});
   final String plate;
   final double confidence;
+  final PlateBox? box;
 }
 
 /// Device-local boundary. There is deliberately no HTTP/image-upload fallback.
@@ -30,9 +33,18 @@ class LocalPlateRecognizer {
     return (result ?? [])
         .map((value) {
           final reading = value as Map;
+          final box = reading['box'] as List?;
           return PlateObservation(
             reading['plate'] as String,
             (reading['confidence'] as num).toDouble(),
+            box: box != null && box.length == 4
+                ? PlateBox(
+                    (box[0] as num).toDouble(),
+                    (box[1] as num).toDouble(),
+                    (box[2] as num).toDouble(),
+                    (box[3] as num).toDouble(),
+                  )
+                : null,
           );
         })
         .toList(growable: false);
@@ -62,10 +74,7 @@ class LocalTemporalConfirmation {
     _candidates.removeWhere((_, observations) => observations.isEmpty);
     final distinct = <String, double>{};
     for (final reading in readings) {
-      final plate = reading.plate.toUpperCase().replaceAll(
-        RegExp('[^A-Z0-9]'),
-        '',
-      );
+      final plate = normalizePlate(reading.plate);
       if (plate.isEmpty ||
           plate.length > 10 ||
           !reading.confidence.isFinite ||

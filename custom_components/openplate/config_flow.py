@@ -11,9 +11,13 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.selector import (
+    EntitySelector,
+    EntitySelectorConfig,
     QrCodeSelector,
     QrCodeSelectorConfig,
     QrErrorCorrectionLevel,
+    SelectSelector,
+    SelectSelectorConfig,
     TextSelector,
     TextSelectorConfig,
 )
@@ -38,6 +42,7 @@ from .const import (
 )
 from .pairing import build_pairing_uri, normalize_base_url
 from .pairing_webhook import async_ensure_pairing_gateway
+from .plates import parse_plates
 
 _QR_FIELD = "qr_code"
 
@@ -179,6 +184,7 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
     """Expose focused management screens instead of one large form."""
 
     def __init__(self) -> None:
+        self._garage_plate: str | None = None
         self._pending_options: dict[str, Any] | None = None
         self._pairing_uri: str | None = None
 
@@ -192,7 +198,7 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         return self.async_show_menu(
             step_id="init",
-            menu_options=["pairing", "plates", "recognition", "connection", "advanced"],
+            menu_options=["pairing", "plates", "garages", "recognition", "connection", "advanced"],
         )
 
     async def async_step_plates(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -205,6 +211,74 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
                     vol.Optional(
                         CONF_PLATES, default=self._current.get(CONF_PLATES, "")
                     ): _plate_selector()
+                }
+            ),
+        )
+
+    async def async_step_garages(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        plates = parse_plates(self._current.get(CONF_PLATES, ""))
+        if not plates:
+            return self.async_abort(reason="no_registered_plates")
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            if user_input.get("plate") in plates:
+                self._garage_plate = user_input["plate"]
+                return await self.async_step_garage()
+            errors["plate"] = "unknown_plate"
+        return self.async_show_form(
+            step_id="garages",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("plate"): SelectSelector(
+                        SelectSelectorConfig(
+                            options=[
+                                {"value": plate, "label": f"{name} ({plate})"}
+                                for plate, name in plates.items()
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_garage(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        if self._garage_plate not in parse_plates(self._current.get(CONF_PLATES, "")):
+            return await self.async_step_garages()
+        assignments = dict(self._current.get("plate_garages", {}))
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            entity = user_input.get("garage_entity_id", "")
+            if user_input.get("remove_assignment", False):
+                assignments.pop(self._garage_plate, None)
+            elif (
+                not isinstance(entity, str)
+                or not entity.startswith("cover.")
+                or self.hass.states.get(entity) is None
+            ):
+                errors["garage_entity_id"] = "invalid_garage"
+            else:
+                assignments[self._garage_plate] = entity
+            if not errors:
+                return self.async_create_entry(
+                    title="", data=self._updated_options({"plate_garages": assignments})
+                )
+        field = vol.Optional(
+            "garage_entity_id",
+            **(
+                {"default": assignments[self._garage_plate]}
+                if self._garage_plate in assignments
+                else {}
+            ),
+        )
+        return self.async_show_form(
+            step_id="garage",
+            errors=errors,
+            description_placeholders={"plate": self._garage_plate},
+            data_schema=vol.Schema(
+                {
+                    field: EntitySelector(EntitySelectorConfig(domain="cover")),
+                    vol.Optional("remove_assignment", default=False): bool,
                 }
             ),
         )

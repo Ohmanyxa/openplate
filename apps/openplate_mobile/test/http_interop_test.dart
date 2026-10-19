@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:openplate_mobile/openplate_api.dart';
 import 'package:openplate_mobile/pairing.dart';
 import 'package:openplate_mobile/settings.dart';
+import 'package:openplate_mobile/plate_motion.dart';
 
 class RecordingClient extends http.BaseClient {
   final inner = http.Client();
@@ -49,6 +50,14 @@ void main() {
           confidence: 0.97,
           observations: 3,
           newEvent: true,
+          motion: PlateMotion(
+            direction: 'approaching',
+            dx: .01,
+            dy: 0,
+            scaleRate: .08,
+            samples: 4,
+            spanSeconds: 3,
+          ),
         ),
       );
       await api.sendHomeAssistantEvent(event);
@@ -65,6 +74,8 @@ void main() {
       );
       expect(state['recognized'], (before['recognized'] as int) + 1);
       expect(state['last_event']['plate'], 'BTEST1');
+      expect(state['last_event']['motion']['direction'], 'approaching');
+      expect(state['last_event']['motion']['scale_rate'], .08);
       expect(
         (state['last_event'] as Map<String, dynamic>).containsKey('session_id'),
         isFalse,
