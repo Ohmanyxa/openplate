@@ -58,8 +58,9 @@ iPhone ──► local HTTP(S) + AES-GCM/replay protection ──► HA webhook
 
 The app uses the camera image stream, not periodic still-photo capture. The processing interval
 limits admission of video frames, not camera acquisition. Only one frame is processed at a time;
-frames arriving while busy are skipped rather than queued. No JPEG encoding, photo files or image
-uploads exist in the mobile path. Native preview and black display mode are independent of recognition.
+frames arriving while busy are skipped rather than queued. Recognition creates no photo files or image uploads. Optional HA live view independently
+encodes up to two JPEG frames per second (maximum edge 640 pixels) on a separate native queue
+and sends them over the paired encrypted channel, with one upload in flight and no queue. Native preview and black display mode are independent of recognition.
 The pinned upstream model artifacts are downloaded once over HTTPS, SHA-256 verified, and cached in
 Application Support (excluded from backups). Subsequent inference works offline. ONNX Runtime 1.30.0
 executes locally on the iPhone CPU with two intra-op threads; Core ML/Neural Engine acceleration has
@@ -69,7 +70,9 @@ The iPhone never receives a Home Assistant administrator token. Registered-plate
 Home Assistant; the Pi runs no model. QR-based one-time shared keys bootstrap
 AES-256-GCM/HKDF-SHA256 protection for pairing, configuration and events even on local HTTP.
 Responses bind the request and status; server-session IDs prevent recorded observations crossing
-HA restarts. HA accepts only observation fields, never images. Continued confirmed observations
+HA restarts. Observation messages accept only observation fields. Separate session-bound camera messages
+feed a memory-only latest-image buffer, exposed through a standard HA camera entity and MJPEG
+handler. Images expire after ten seconds without an update; no image is persisted by OpenPlate. Continued confirmed observations
 refresh HA presence. Sending runs separately from inference; pending observations are coalesced per
 plate and expire after ten seconds so reconnecting does not replay old arrivals.
 See [the wire specification](docs/ENCRYPTED_TRANSPORT.md).

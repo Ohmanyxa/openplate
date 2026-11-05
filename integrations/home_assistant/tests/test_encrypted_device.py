@@ -72,6 +72,7 @@ class EncryptedDeviceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(configuration["recognition_api_key"], "")
         self.assertEqual(configuration["recognition_mode"], "on_device")
         self.assertEqual(configuration["session_id"], self.manager._session_id)
+        self.assertEqual(configuration["registered_plates"], {"BTEST1": "Car"})
 
     async def test_even_authenticated_frame_payloads_are_rejected(self):
         payload = {**self.observation(), "image": "not-allowed"}

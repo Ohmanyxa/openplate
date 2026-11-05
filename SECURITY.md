@@ -5,9 +5,11 @@
   supplied output locations and are ignored by Git by default.
 - Model download URLs and caches are currently managed by upstream libraries. Reproducible deployment
   should add pinned artifact hashes before unattended provisioning.
-- The iOS client requires HTTPS for camera frames to the separate recognition server. Recognition
-  uses an API key stored in Keychain. The HA channel supports local HTTP using application encryption.
-- Pairing, HA configuration and plate events use AES-256-GCM with HKDF-SHA256 direction/context keys,
+- The iOS client performs recognition locally. Optional HA live view sends JPEG frames through
+  the paired AES-256-GCM channel, including over local HTTP. OpenPlate holds only the latest image
+  in HA memory and expires it after ten seconds. HA browser transport and camera permissions remain
+  the responsibility of HA; use HTTPS for remote viewing. Device keys are stored in iOS Keychain.
+- Pairing, HA configuration, camera images and plate events use AES-256-GCM with HKDF-SHA256 direction/context keys,
   random 96-bit nonces and authenticated IDs/timestamps. Replies bind the request ID and HTTP status.
   Unauthenticated responses are never treated as acknowledgements. See [the protocol](docs/ENCRYPTED_TRANSPORT.md).
 - Home Assistant may store plate text in its recorder, so recorder retention and access controls remain necessary.

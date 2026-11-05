@@ -23,7 +23,8 @@ a verified live connection.
 After pairing, tap **Erkennung starten**. The first start downloads about 11 MB of pinned models over
 HTTPS and verifies their SHA-256 hashes. Subsequent recognition works offline on the iPhone CPU via
 ONNX Runtime 1.30.0, not yet Core ML/Neural Engine. iOS 15.1+ is required.
-Camera frames never leave the phone; only confirmed plate strings and metadata go encrypted to HA.
+By default camera frames stay local; confirmed plate strings and metadata go encrypted to HA.
+Optional HA live view additionally sends encrypted camera images.
 Tap **Erkennung stoppen** to return to local preview. **Schwarzmodus** makes the app surface black and
 hides controls immediately without stopping the camera or a running recognition loop. Tap the black
 screen to reveal controls, then **Vorschau anzeigen** to restore the preview. Controls in black mode
@@ -35,9 +36,9 @@ reinitializes it and resumes recognition if it was running. Camera initializatio
 to handle permission dialogs and rapid lifecycle changes. No background camera operation is promised.
 The camera supplies a continuous video-frame stream. Recognition admits a current frame at the
 configured processing interval; while processing is busy, newer frames are skipped, not queued.
-The native serial worker letterboxes BGRA for YOLO, crops the original frame for CCT OCR, and returns
+The native serial worker letterboxes BGRA for YOLO, crops the original frame for PaddleOCR Latin, and returns
 strings to local confirmation (three observations within four seconds, confidence at least 0.8).
-Start with a 1-second processing interval. There are no photo calls, image files or image uploads.
+Start with a 1-second processing interval. Recognition uses no photo calls, image files or image uploads. Optional HA live view is independent.
 Android local inference is not implemented. Pending HA events are held in memory, up to 100;
 on overflow the oldest event is discarded and the count appears in recognition status.
 
@@ -51,11 +52,28 @@ The offer is consumed after successful exchange and expires after ten minutes. S
 iOS Keychain. No frame-recognition server is used by the app.
 Upgrade both components and pair again when upgrading to v0.5.0 to enable encrypted-only transport.
 
-The question-mark button on the home screen opens setup help explaining which address belongs to
-Home Assistant and how to find it. Before the first scan it shows the usual local address as an
-unverified suggestion, not a discovered address.
-After pairing, the help screen displays a selectable, copyable Home Assistant base URL, excluding
-the private webhook ID and query parameters. Help is also available from connection settings.
+## App navigation
+
+The dashboard shows camera readiness and authenticated HA connection status. There is one
+**Camera open** action and one **Settings** entry in the top bar. Pairing is available only
+under Settings → Connection; the QR imports all credentials. Manual webhook/key/device-ID
+editing has been removed. Existing stored pairings remain usable.
+
+Settings groups connection, recognition information and operation/privacy. The processing interval
+and plate list are managed in HA, not a competing local editor. **Setup & help** is available
+once at the bottom of Settings. Only the non-secret HA base URL is displayed.
+
+The live camera owns start/stop and black mode; raw OCR is tucked into a Diagnose section.
+The last confirmed plate and camera-relative direction remain visible. The app must stay
+foregrounded. New navigation widget tests cover a 390-pixel layout, 320-pixel layout at 170%
+text scaling, secret redaction and unique entry points. For optional rendered UI captures:
+
+```bash
+OPENPLATE_UI_SCREENSHOTS=/tmp/openplate-ui-preview flutter test test/app_navigation_test.dart
+```
+
+The screenshot helper loads system text fonts only on macOS; these are generated QA artifacts,
+not portable pixel-perfect golden assertions.
 
 ## Motion estimates (development worktree)
 
@@ -69,17 +87,43 @@ can still mimic depth motion. Test empirically; do not authorize a door from thi
 
 Only the small motion metadata is sent, encrypted, if HA advertises `motion_v1`. With an older HA
 integration, the new app keeps sending the old observation shape. Upgrade HA before field testing.
-The CCT model itself still has no umlaut classes. A local Apple Vision `de-DE` recheck now reads
-the original high-resolution plate crop whenever the CCT output contains A/O/U. An Ä/Ö/Ü reading
-is accepted only at Vision confidence ≥0.8 and when its base characters exactly match the CCT
-result; the lower confidence is used. Ambiguous matches or errors keep the original model reading.
-No registered plate list or dictionary is used to invent a match. This adds another local OCR pass
-and needs temperature/latency testing on the mounted iPhone. Frames still never leave the phone.
-It is not a guarantee that every umlaut will be read; dots can be missed by both OCR engines.
-Pure merge tests cover all three umlauts; rendered-text Vision checks are synthetic, not a real-plate
-accuracy benchmark. The iOS runtime tests remain unverified in this change because disk exhaustion
-prevented the simulator build. The same Vision methods were exercised on macOS with synthetic
-MÜ/BÖ/SÄK strings. HA maps growing/shrinking plate size to `arrival`/`departure`.
+## OCR with umlauts
+
+The iPhone now uses the official [PaddleOCR Latin ONNX model](https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx),
+revision `89d3a50e2c27e2e7cceeab0e944c25c807d5db4f`, instead of the ASCII-only CCT reader.
+The Vision post-correction path has been removed. Ä/Ö/Ü are model output classes, not substitutions
+from the registered plate list. YOLO detection remains unchanged. The Python reference pipeline
+still uses CCT; that is a separate backend.
+
+Observed native contract: float32 BGR/CHW `[1,3,48,320]`, aspect-preserving bilinear resize,
+normalization to [-1,1], right-zero padding. Output `fetch_name_0` is `[1,40,838]` for width 320.
+The 836-entry upstream dictionary plus leading CTC blank and appended space are kept in exact order,
+including duplicate glyphs. CTC repeat/blank handling replaces the old independent-slot decoder.
+Unsupported characters are rejected, not silently discarded. Output is normalized to German plate
+characters and confirmed across multiple frames as before.
+
+The 8,042,023-byte model is SHA-256 pinned, downloaded once and cached next to the detector.
+First use of this app version needs internet for the new OCR artifact; steady-state inference
+remains offline. No old credentials, HA protocol or frame privacy settings need to change.
+[Model provenance and Apache-2.0 notice](../../third_party/NOTICE.md).
+
+Alphabet support does not guarantee accuracy: general OCR can confuse seals, EU country marks,
+small dots, perspective and repeated characters. Use real mounted-camera samples before relying
+on automations. Physical iPhone 12 mini accuracy, sustained speed and thermal behavior are not measured.
+
+## Guided vehicle verification
+
+HA advertises `vehicle_v1` and supplies registered plates through the encrypted
+configuration endpoint. Vehicle detection, type/color and ReID run locally.
+Initial references require explicit review in the live camera. Only confirmed
+descriptors are retained in iOS Keychain; preview images stay in memory.
+
+Settings → Vehicle profiles permits explicit opt-in to automatic comparison after
+six references, three time-separated capture groups and front/rear views. This is
+a minimum workflow rule, not measured security calibration. Existing presence-only
+HA automations need an additional vehicle-verdict condition; they are not modified.
+The three bundled models add about 18 MB. Physical iPhone performance and spoofing
+tests remain open. See [the complete guide](../../docs/VEHICLE_VERIFICATION.md).
 
 ## Development
 
@@ -101,3 +145,14 @@ xcodebuild -workspace Runner.xcworkspace -scheme Runner \
 Add `OPENPLATE_MODEL_TESTS=1` to explicitly opt into downloading the real models and the public,
 pinned upstream smoke image. That test checks native detection/OCR against the Python reference
 string `5AU5341`; it is not a German-plate accuracy or physical-iPhone performance benchmark.
+
+## Optional encrypted Home Assistant live image
+
+On the camera screen, tap **HA-Livebild starten**. With the updated HA integration,
+the paired device exposes **Live camera**. Recognition is independent of this control.
+Live view is off whenever the camera screen is opened anew. **HA-Livebild stoppen**
+clears the last image in HA; network failure expires it after ten seconds.
+The app sends at most two JPEG images per second, with a maximum edge of 640 pixels,
+through the existing encrypted QR pairing channel. It does not record video or expose
+an RTSP server. Black mode continues streaming; backgrounding pauses it and foregrounding
+resumes it. Keep the app open for continuous camera operation.

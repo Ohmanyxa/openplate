@@ -11,9 +11,9 @@
 - **Kamera und Verbindung:** Erkennung, HA-Adresse und Anwesenheitsdauer.
 
 Vorhandene Kennzeichen und Kopplungen werden übernommen. Ä/Ö/Ü sind eigene Zeichen,
-keine automatischen A/O/U-Aliase. Die iPhone-App ergänzt das ASCII-OCR-Modell durch
-eine lokale Vision-Nachprüfung am Originalausschnitt; Erkennungsqualität und kleine
-Umlautpunkte müssen weiterhin in der realen Montage getestet werden.
+keine automatischen A/O/U-Aliase. Die iPhone-App nutzt jetzt PaddleOCR Latin mit
+Ä/Ö/Ü im Zeichensatz statt des ASCII-OCR-Modells plus Vision-Nachprüfung.
+Erkennungsqualität und kleine Umlautpunkte müssen in der realen Montage getestet werden.
 
 ## Zwei Entitäten je Kennzeichen
 

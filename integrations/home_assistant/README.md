@@ -29,7 +29,7 @@ It contains no permanent credentials. The temporary key is never sent over the n
 consumes the offer on its first successfully authenticated exchange; invalid requests do not consume it.
 Treat the QR as sensitive while valid. The iPhone stores the device key in iOS Keychain. Home Assistant
 stores configuration in its normal configuration-entry storage; protect the host and its backups.
-Camera frames are never sent to HA or a recognition server.
+Recognition frames stay local. Enabling HA live view additionally sends encrypted images to paired HA.
 
 To change settings later, open **Settings → Devices & services → OpenPlate → Configure**. The menu
 has three entries: Manage plates, Pair an iPhone, and Camera and connection.
@@ -66,9 +66,9 @@ Old garage settings remain stored but are ignored; move any desired actions into
 Missing motion from older apps is unknown. Presence may turn on before the fourth frame needed for
 direction: trigger on the direction sensor transition, not only presence off → on.
 Camera-relative direction is not necessarily arrival at a property if the camera faces the other way.
-Umlauts remain exact identities: `MÜ` and `MU` are never aliases. The new iPhone build uses a
-local Vision crop recheck because the CCT alphabet has no umlaut classes. Vision must read the
-umlaut and agree on every other character; registration never substitutes it. Accuracy still depends
+Umlauts remain exact identities: `MÜ` and `MU` are never aliases. The new iPhone build uses
+PaddleOCR Latin with actual umlaut output classes instead of CCT plus Vision correction;
+registration never substitutes an umlaut into an ASCII OCR reading. Accuracy still depends
 on actual images. See [setup and automation guidance](../../docs/GARAGES.md) and the
 [security review](../../docs/SECURITY_REVIEW_2026-10-19.md).
 
@@ -116,12 +116,25 @@ Possession of the paired key authenticates observations, not their camera proven
 phone/key or a copied physical plate remains outside that guarantee. A plate match alone must not
 authorize a garage door.
 
+## Guided vehicle verification
+
+The encrypted configuration supplies registered plates and advertises `vehicle_v1`.
+Each plate has an extra **vehicle match** sensor: `unknown`, `enrollment_required`,
+`confirmed`, `match`, `mismatch`. Absence resets it to unknown. Only verdict metadata
+is accepted; images and descriptors are rejected. Enrollment and matching run on iPhone.
+
+**Existing presence-only automations do not automatically gain vehicle verification.**
+Use the new verdict sensor explicitly: `confirmed` is manual approval in guided mode;
+`match` is automatic visual comparison, not authentication.
+[Setup and limitations](../../docs/VEHICLE_VERIFICATION.md).
+
 ## Pairing regression tests
 
 These tests exercise the one-time gateway and form selectors against Home Assistant 2026.10.1:
 
 ```bash
 PYTHONPATH=. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+  --with 'numpy>=2.3.2' --with 'PyTurboJPEG==1.8.3' \
   python -m unittest discover -s integrations/home_assistant/tests -v
 ```
 
@@ -139,3 +152,23 @@ OPENPLATE_INTEROP_URL=http://127.0.0.1:PORT flutter test test/http_interop_test.
 ```
 
 The harness exposes test-only bootstrap/state routes on loopback and is not part of the installed integration.
+
+## Optional iPhone live camera
+
+Update both the integration and the iPhone app, restart HA, and open the camera screen.
+Tap **HA-Livebild starten** to send an encrypted live image to paired Home Assistant.
+The integration creates a **Live camera** entity on the paired device; add it to a camera
+card and open its live view. Recognition can be started or stopped independently.
+No extra stream URL, credentials or certificate setup is required.
+
+This is JPEG live view (up to 2 frames/second, maximum edge 640 pixels), not RTSP,
+H.264 video or a recording service. The phone uses its existing capture session and
+AES-256-GCM pairing channel. Only the latest image is held in HA memory; no images
+are saved by OpenPlate. HA users and integrations with camera access can view it.
+The HA-to-browser connection uses HA's own transport: use HTTPS for remote viewing.
+
+**HA-Livebild stoppen** clears the live image. On disconnect the camera becomes
+unavailable after ten seconds; expiration cleanup runs every five seconds. Leaving
+the app or closing its camera pauses transmission. Returning from the background
+resumes live view if it was enabled; opening the camera screen anew starts with it off.
+Black mode keeps an enabled live view running. The iPhone must remain in the foreground.

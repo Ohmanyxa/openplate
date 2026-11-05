@@ -87,7 +87,7 @@ class SetupHelpScreen extends StatelessWidget {
             'zum Beispiel /config/integrations.\n\n'
             '3. Trage diese Adresse bei OpenPlate in Home Assistant ein. '
             'Normalerweise wird sie automatisch ermittelt und der QR-Code erscheint direkt.\n\n'
-            '4. Tippe auf dem iPhone auf „iPhone per QR-Code koppeln“, scanne den Code '
+            '4. Öffne auf dem iPhone die Einstellungen, tippe auf „QR-Code scannen“, scanne den Code '
             'und bestätige danach in Home Assistant mit „Absenden“.',
           ),
           const SizedBox(height: 20),
@@ -106,8 +106,8 @@ class SetupHelpScreen extends StatelessWidget {
           const Text(
             'Detection, OCR und Mehrfachbestätigung laufen lokal auf dem iPhone. '
             'Du brauchst keinen Erkennungsserver. Die Modelle werden beim ersten Start '
-            'heruntergeladen und danach offline genutzt. Kamerabilder bleiben auf dem Handy; '
-            'nur bestätigte Kennzeichen werden verschlüsselt an Home Assistant gesendet.',
+            'heruntergeladen und danach offline genutzt. Kennzeichen werden verschlüsselt gesendet. '
+            'Mit „HA-Livebild starten“ kannst du zusätzlich Kamerabilder verschlüsselt an Home Assistant übertragen.',
           ),
         ],
       ),

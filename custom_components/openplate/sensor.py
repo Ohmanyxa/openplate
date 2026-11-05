@@ -14,8 +14,32 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:  # type: i
         [
             OpenPlateLastPlateSensor(manager),
             *(OpenPlateDirectionSensor(manager, plate) for plate in manager.plates),
+            *(OpenPlateVehicleSensor(manager, plate) for plate in manager.plates),
         ]
     )
+
+
+class OpenPlateVehicleSensor(OpenPlateEntity, SensorEntity):
+    """Phone-asserted visual verdict, separate from ordinary plate presence."""
+
+    _attr_icon = "mdi:car-check"
+    _attr_device_class = "enum"
+    _attr_options = ["unknown", "enrollment_required", "confirmed", "match", "mismatch"]
+
+    def __init__(self, manager, plate: str) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(manager)
+        self.plate = plate
+        self._attr_name = f"{plate} vehicle match"
+        self._attr_unique_id = f"{manager.config[CONF_DEVICE_ID]}_{plate}_vehicle"
+
+    @property
+    def native_value(self):  # type: ignore[no-untyped-def]
+        state = self.manager.presence[self.plate]
+        return (state.vehicle or {}).get("status", "unknown") if state.present else "unknown"
+
+    @property
+    def extra_state_attributes(self):  # type: ignore[no-untyped-def]
+        return {"plate": self.plate, **(self.manager.presence[self.plate].vehicle or {})}
 
 
 class OpenPlateDirectionSensor(OpenPlateEntity, SensorEntity):

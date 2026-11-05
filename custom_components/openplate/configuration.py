@@ -11,6 +11,7 @@ from .const import (
     DEFAULT_CAPTURE_INTERVAL,
 )
 from .pairing import normalize_base_url
+from .plates import parse_plates
 
 
 def mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
@@ -18,7 +19,8 @@ def mobile_configuration(configuration: dict[str, Any]) -> dict[str, Any]:
     return {
         "device_id": configuration[CONF_DEVICE_ID],
         "recognition_mode": "on_device",
-        "capabilities": ["motion_v1"],
+        "capabilities": ["motion_v1", "vehicle_v1", "camera_jpeg_v1"],
+        "registered_plates": parse_plates(configuration.get("plates", "")),
         # Empty legacy keys keep previously paired apps/config readers compatible.
         "recognition_url": "",
         "recognition_api_key": "",

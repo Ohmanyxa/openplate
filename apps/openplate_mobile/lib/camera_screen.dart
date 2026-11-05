@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -12,14 +13,16 @@ import 'video_frame.dart';
 import 'local_recognition.dart';
 import 'plate_identity.dart';
 import 'plate_motion.dart';
+import 'vehicle_verification.dart';
 
-/// Frames never leave the device. Only confirmed strings go to paired HA.
+/// Local recognition with an independently enabled encrypted HA live image.
 class CameraScreen extends StatefulWidget {
   const CameraScreen({
     required this.cameras,
     required this.settings,
     this.apiFactory,
     this.recognizer,
+    this.vehicleVerifierFactory,
     super.key,
   });
 
@@ -27,6 +30,7 @@ class CameraScreen extends StatefulWidget {
   final OpenPlateSettings settings;
   final OpenPlateApi Function(OpenPlateSettings)? apiFactory;
   final LocalPlateRecognizer? recognizer;
+  final VehicleVerifier Function(OpenPlateSettings)? vehicleVerifierFactory;
 
   @override
   State<CameraScreen> createState() => _CameraScreenState();
@@ -49,6 +53,80 @@ class _CameraScreenState extends State<CameraScreen>
   bool _startingRecognition = false;
   bool _modelsReady = false;
   bool _sendingEvents = false;
+  bool _streaming = false;
+  bool _liveImageEnabledOnce = false;
+  bool _sendingFrame = false;
+  bool _stoppingStream = false;
+  Duration? _lastStreamFrame;
+  String _streamStatus = 'Livebild ausgeschaltet';
+  static const _cameraChannel = MethodChannel('openplate/local_recognition');
+
+  Future<void> _sendLiveFrame(VideoFrame frame, int generation) async {
+    _sendingFrame = true;
+    final capturedAt = DateTime.now().toUtc();
+    final api = _api;
+    try {
+      final jpeg = await _cameraChannel
+          .invokeMethod<Uint8List>('encodeCameraFrame', {
+            'bytes': frame.planes.single,
+            'width': frame.width,
+            'height': frame.height,
+            'bytesPerRow': frame.strides.single,
+            'orientation':
+                _controller?.value.deviceOrientation.name ?? 'portraitUp',
+          });
+      if (!mounted ||
+          !_streaming ||
+          !_foreground ||
+          generation != _generation ||
+          jpeg == null) {
+        return;
+      }
+      await api.sendCameraFrame(jpeg, capturedAt);
+      if (mounted && _streaming) {
+        setState(
+          () => _streamStatus = 'Livebild verschlüsselt an Home Assistant',
+        );
+      }
+    } on Object {
+      if (mounted && _streaming) {
+        setState(
+          () => _streamStatus =
+              'Livebild unterbrochen · Verbindung wird erneut versucht',
+        );
+      }
+    } finally {
+      _sendingFrame = false;
+    }
+  }
+
+  Future<void> _stopLiveImage() async {
+    if (_stoppingStream || !_liveImageEnabledOnce) return;
+    _stoppingStream = true;
+    // Wait for the one in-flight upload so a late frame cannot undo the stop.
+    while (_sendingFrame) {
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    try {
+      await _api.sendCameraFrame(null, DateTime.now().toUtc());
+    } on Object {
+      // HA expires the last image automatically after ten seconds.
+    } finally {
+      _stoppingStream = false;
+    }
+  }
+
+  void _toggleLiveImage() {
+    setState(() {
+      _streaming = !_streaming;
+      if (_streaming) _liveImageEnabledOnce = true;
+      _streamStatus = _streaming
+          ? 'Livebild wird verbunden'
+          : 'Livebild ausgeschaltet';
+      _lastStreamFrame = null;
+    });
+    if (!_streaming) unawaited(_stopLiveImage());
+  }
 
   OpenPlateApi _createApi(OpenPlateSettings settings) =>
       widget.apiFactory?.call(settings) ?? OpenPlateApi(settings);
@@ -70,6 +148,128 @@ class _CameraScreenState extends State<CameraScreen>
   String? _rawReading;
   int _droppedEvents = 0;
   final List<PendingPlateEvent> _pendingEvents = [];
+  VehicleVerifier? _vehicleVerifier;
+  final Map<String, VehicleEvidence> _vehicleCandidates = {};
+  final Map<String, VehicleAssessment> _vehicleResults = {};
+  final Map<String, ConfirmedPlate> _candidateProofs = {};
+  bool _reviewingVehicle = false;
+
+  Future<void> _configureVehicles() async {
+    if (!_settings.supportsVehicleVerification) return;
+    final verifier =
+        widget.vehicleVerifierFactory?.call(_settings) ??
+        VehicleVerifier(_settings);
+    if (_vehicleVerifier?.scope != verifier.scope) _vehicleVerifier = verifier;
+    await _vehicleVerifier!.load(_settings.registeredPlates.keys);
+    await _local.configureVehicles(_settings.registeredPlates.keys);
+  }
+
+  Future<void> _reviewVehicle(String plate) async {
+    final evidence = _vehicleCandidates[plate];
+    final verifier = _vehicleVerifier;
+    final proof = _candidateProofs[plate];
+    if (_reviewingVehicle ||
+        evidence == null ||
+        verifier == null ||
+        proof == null) {
+      return;
+    }
+    _reviewingVehicle = true;
+    var view = 'front';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, update) => AlertDialog(
+          title: Text('Ist das dein Fahrzeug für $plate?'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Image.memory(evidence.preview, gaplessPlayback: true),
+                const SizedBox(height: 12),
+                Text('${evidence.type} · ${evidence.color}'),
+                const Text(
+                  'Nur bestätigen, wenn Kennzeichen und vollständiges Fahrzeug zusammenpassen. '
+                  'Der Ausschnitt bleibt nur kurz im Arbeitsspeicher; gespeichert wird der Merkmalsvektor.',
+                ),
+                DropdownButton<String>(
+                  value: view,
+                  isExpanded: true,
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'front',
+                      child: Text('Frontansicht'),
+                    ),
+                    DropdownMenuItem(value: 'rear', child: Text('Heckansicht')),
+                  ],
+                  onChanged: (value) => update(() => view = value!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Nein'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Bestätigen'),
+            ),
+          ],
+        ),
+      ),
+    );
+    try {
+      if (accepted == true &&
+          mounted &&
+          _foreground &&
+          _recognizing &&
+          identical(verifier, _vehicleVerifier) &&
+          _settings.registeredPlates.containsKey(plate)) {
+        await verifier.confirm(plate, evidence, view, DateTime.now().toUtc());
+        final verdict = VehicleAssessment(
+          'confirmed',
+          type: evidence.type,
+          color: evidence.color,
+          referenceCount: verifier.profiles[plate]!.references.length,
+        );
+        _pendingEvents.removeWhere((event) => event.plate.plate == plate);
+        _pendingEvents.add(
+          PendingPlateEvent.fromPlate(
+            ConfirmedPlate(
+              plate: proof.plate,
+              confidence: proof.confidence,
+              observations: proof.observations,
+              newEvent: true,
+              vehicle: verdict,
+            ),
+          ),
+        );
+        unawaited(_flushPending(_api));
+        if (mounted && verifier.profiles[plate]!.ready) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Referenzen bereit. Automatischen Vergleich unter Einstellungen → Fahrzeugprofile bewusst aktivieren.',
+              ),
+            ),
+          );
+        }
+        if (mounted) {
+          setState(() => _vehicleResults[plate] = verdict);
+        }
+      }
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+      }
+    } finally {
+      _reviewingVehicle = false;
+    }
+  }
 
   @override
   void initState() {
@@ -104,6 +304,9 @@ class _CameraScreenState extends State<CameraScreen>
     _confirmation.reset();
     _motion.reset();
     _pendingEvents.clear();
+    _vehicleVerifier?.resetTransient();
+    _vehicleCandidates.clear();
+    _candidateProofs.clear();
     _lastFrame = null;
     _cameraTask = _cameraTask.then((_) async {
       final previous = _controller;
@@ -179,6 +382,9 @@ class _CameraScreenState extends State<CameraScreen>
           updated.recognitionUrl != _settings.recognitionUrl ||
           updated.apiKey != _settings.apiKey ||
           updated.captureIntervalSeconds != _settings.captureIntervalSeconds ||
+          !mapEquals(updated.registeredPlates, _settings.registeredPlates) ||
+          updated.supportsVehicleVerification !=
+              _settings.supportsVehicleVerification ||
           updated.homeAssistantWebhookUrl !=
               _settings.homeAssistantWebhookUrl ||
           updated.webhookSecret != _settings.webhookSecret;
@@ -193,6 +399,7 @@ class _CameraScreenState extends State<CameraScreen>
         }
         _resetFrameAdmission();
       }
+      await _configureVehicles();
       setState(() => _haStatus = 'Home Assistant verbunden');
     } on Object {
       if (mounted) {
@@ -212,10 +419,27 @@ class _CameraScreenState extends State<CameraScreen>
     _motion.reset();
     _motionStatus = 'Richtung unbekannt';
     _pendingEvents.clear();
+    _vehicleVerifier?.resetTransient();
+    _vehicleCandidates.clear();
+    _vehicleResults.clear();
+    _candidateProofs.clear();
     _lastFrame = null;
   }
 
   void _onVideoFrame(CameraImage image) {
+    final streamNow = _videoClock.elapsed;
+    if (_streaming &&
+        !_sendingFrame &&
+        !_stoppingStream &&
+        _foreground &&
+        _settings.isPaired &&
+        image.format.group == ImageFormatGroup.bgra8888 &&
+        (_lastStreamFrame == null ||
+            streamNow - _lastStreamFrame! >=
+                const Duration(milliseconds: 500))) {
+      _lastStreamFrame = streamNow;
+      unawaited(_sendLiveFrame(VideoFrame(image), _generation));
+    }
     if (_busy || !_recognizing || !_foreground || !_settings.isComplete) return;
     final now = _videoClock.elapsed;
     if (_lastFrame != null &&
@@ -239,6 +463,7 @@ class _CameraScreenState extends State<CameraScreen>
       });
       try {
         await _local.initialize();
+        await _configureVehicles();
         _modelsReady = true;
       } on Object catch (error) {
         if (mounted) {
@@ -312,6 +537,11 @@ class _CameraScreenState extends State<CameraScreen>
       final staleGeometry =
           _videoClock.elapsed - frameReceiptAt > const Duration(seconds: 2);
       if (staleGeometry) _motion.reset();
+      final now = DateTime.now().toUtc();
+      _vehicleCandidates.removeWhere(
+        (_, evidence) =>
+            now.difference(evidence.capturedAt) > const Duration(seconds: 15),
+      );
       for (final reading in readings) {
         final key = normalizePlate(reading.plate);
         if (staleGeometry ||
@@ -323,11 +553,31 @@ class _CameraScreenState extends State<CameraScreen>
         } else {
           movements[key] = _motion.update(key, reading.box, frameReceiptAt);
         }
+        if (_vehicleVerifier != null &&
+            _settings.registeredPlates.containsKey(key)) {
+          final evidence = staleGeometry || counts[key] != 1
+              ? null
+              : reading.vehicle;
+          _vehicleResults[key] = _vehicleVerifier!.assess(key, evidence, now);
+        }
       }
       _motionStatus = movements.isEmpty
           ? 'Richtung unbekannt'
           : movements.values.first.label;
       for (final plate in result) {
+        if (_vehicleVerifier != null &&
+            _settings.registeredPlates.containsKey(plate.plate)) {
+          final matches = readings
+              .where((r) => normalizePlate(r.plate) == plate.plate)
+              .toList();
+          if (!staleGeometry &&
+              matches.length == 1 &&
+              matches.single.vehicle?.usable == true &&
+              _vehicleVerifier!.profiles[plate.plate]?.automatic != true) {
+            _vehicleCandidates[plate.plate] = matches.single.vehicle!;
+            _candidateProofs[plate.plate] = plate;
+          }
+        }
         // Coalesce presence refreshes; never replay an outage as a queue of arrivals.
         _pendingEvents.removeWhere((event) => event.plate.plate == plate.plate);
         // A network outage must not create an unbounded event queue.
@@ -343,6 +593,10 @@ class _CameraScreenState extends State<CameraScreen>
               observations: plate.observations,
               newEvent: plate.newEvent,
               motion: movements[plate.plate] ?? const PlateMotion(),
+              vehicle: _settings.supportsVehicleVerification
+                  ? _vehicleResults[plate.plate] ??
+                        const VehicleAssessment('unknown')
+                  : null,
             ),
           ),
         );
@@ -420,6 +674,7 @@ class _CameraScreenState extends State<CameraScreen>
     if (foreground) {
       unawaited(_refreshConfiguration());
     } else {
+      unawaited(_stopLiveImage());
       setState(() => _cameraStatus = 'Pausiert – App im Vordergrund öffnen');
     }
   }
@@ -430,6 +685,8 @@ class _CameraScreenState extends State<CameraScreen>
     _configurationTimer?.cancel();
     _hideControlsTimer?.cancel();
     _foreground = false;
+    _streaming = false;
+    unawaited(_stopLiveImage());
     _queueCamera(false);
     unawaited(WakelockPlus.disable());
     unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
@@ -480,14 +737,29 @@ class _CameraScreenState extends State<CameraScreen>
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Material(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(12),
+                    color: const Color(0xED151E29),
+                    borderRadius: BorderRadius.circular(20),
                     child: Padding(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(18),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.videocam_outlined,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Live-Kamera',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
                           Text(_cameraStatus),
+                          Text(_streamStatus),
                           Text(
                             _settings.isPaired
                                 ? _haStatus
@@ -499,13 +771,72 @@ class _CameraScreenState extends State<CameraScreen>
                                 : 'Nur Live-Vorschau · keine Bildübertragung. '
                                       'Home Assistant per QR-Code koppeln. Die Erkennung läuft lokal.',
                           ),
-                          if (_lastPlate != null)
-                            Text('Zuletzt bestätigt: $_lastPlate'),
-                          if (_rawReading != null)
-                            Text(
-                              'OCR-Rohwert (nicht automatisch bestätigt): $_rawReading',
+                          if (_lastPlate != null) ...[
+                            const SizedBox(height: 16),
+                            const Text(
+                              'ZULETZT BESTÄTIGT',
+                              style: TextStyle(
+                                fontSize: 10,
+                                letterSpacing: 1.5,
+                              ),
                             ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F4F8),
+                                borderRadius: BorderRadius.circular(8),
+                                border: const Border(
+                                  left: BorderSide(
+                                    color: Color(0xFF2455B2),
+                                    width: 10,
+                                  ),
+                                ),
+                              ),
+                              child: Text(
+                                _lastPlate!,
+                                style: const TextStyle(
+                                  color: Color(0xFF0B1118),
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                          ],
                           Text(_motionStatus),
+                          if (_lastPlate != null &&
+                              _vehicleResults[_lastPlate] != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              'Fahrzeug: ${_vehicleResults[_lastPlate]!.status}',
+                            ),
+                          ],
+                          for (final plate in _vehicleCandidates.keys)
+                            TextButton.icon(
+                              onPressed: _reviewingVehicle
+                                  ? null
+                                  : () => _reviewVehicle(plate),
+                              icon: const Icon(Icons.directions_car_outlined),
+                              label: Text('$plate · Fahrzeug bestätigen'),
+                            ),
+                          if (_rawReading != null)
+                            ExpansionTile(
+                              tilePadding: EdgeInsets.zero,
+                              title: const Text(
+                                'Diagnose',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              children: [
+                                Text(
+                                  'OCR-Rohwert (nicht bestätigt): $_rawReading',
+                                ),
+                              ],
+                            ),
                           if (_blackMode)
                             const Text(
                               'Bedienung wird nach 8 Sekunden ausgeblendet.',
@@ -540,6 +871,20 @@ class _CameraScreenState extends State<CameraScreen>
                             _recognizing
                                 ? 'Erkennung stoppen'
                                 : 'Erkennung starten',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.tonalIcon(
+                          onPressed: _settings.isPaired && controller != null
+                              ? _toggleLiveImage
+                              : null,
+                          icon: Icon(
+                            _streaming ? Icons.videocam_off : Icons.videocam,
+                          ),
+                          label: Text(
+                            _streaming
+                                ? 'HA-Livebild stoppen'
+                                : 'HA-Livebild starten',
                           ),
                         ),
                         const SizedBox(height: 8),

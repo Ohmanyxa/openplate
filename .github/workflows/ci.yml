@@ -30,7 +30,7 @@ jobs:
       - name: Verify one-time pairing with Home Assistant
         env:
           PYTHONPATH: .
-        run: uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' python -m unittest discover -s integrations/home_assistant/tests -v
+        run: uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' --with 'numpy>=2.3.2' --with 'PyTurboJPEG==1.8.3' python -m unittest discover -s integrations/home_assistant/tests -v
 
   flutter:
     runs-on: ubuntu-latest

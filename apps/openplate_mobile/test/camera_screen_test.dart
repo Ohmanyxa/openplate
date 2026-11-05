@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 
 import 'package:camera_platform_interface/camera_platform_interface.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import 'package:openplate_mobile/openplate_api.dart';
 import 'package:openplate_mobile/settings.dart';
 import 'package:openplate_mobile/local_recognition.dart';
 import 'package:openplate_mobile/video_frame.dart';
+import 'package:openplate_mobile/vehicle_verification.dart';
 
 const camera = CameraDescription(
   name: 'test-back',
@@ -123,6 +125,12 @@ class TestCamera extends CameraPlatform {
 class TestApi extends OpenPlateApi {
   TestApi(super.settings);
   final sent = <PendingPlateEvent>[];
+  final cameraFrames = <Uint8List?>[];
+  @override
+  Future<void> sendCameraFrame(Uint8List? jpeg, DateTime capturedAt) async {
+    cameraFrames.add(jpeg);
+  }
+
   @override
   Future<OpenPlateSettings> refreshConfiguration() async => settings;
   @override
@@ -131,13 +139,34 @@ class TestApi extends OpenPlateApi {
 }
 
 class TestRecognizer extends LocalPlateRecognizer {
+  bool withVehicle = false;
+  @override
+  Future<void> configureVehicles(Iterable<String> plates) async {}
   int recognitions = 0;
   @override
   Future<String> initialize() async => 'local test backend';
   @override
   Future<List<PlateObservation>> recognize(VideoFrame frame) async {
     recognitions++;
-    return [const PlateObservation('BTEST1', .95)];
+    return [
+      PlateObservation(
+        'BTEST1',
+        .95,
+        vehicle: withVehicle
+            ? VehicleEvidence(
+                type: 'car',
+                color: 'white',
+                typeConfidence: .95,
+                colorConfidence: .95,
+                embedding: List.generate(512, (i) => i == 0 ? 1.0 : 0.0),
+                preview: base64Decode(
+                  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+                ),
+                capturedAt: DateTime.now().toUtc(),
+              )
+            : null,
+      ),
+    ];
   }
 }
 
@@ -197,6 +226,50 @@ void main() {
     },
   );
 
+  testWidgets('live image is opt-in and works with recognition switched off', (
+    tester,
+  ) async {
+    final api = TestApi(configured);
+    const channel = MethodChannel('openplate/local_recognition');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'encodeCameraFrame');
+          return Uint8List.fromList([255, 216, 255, 217]);
+        });
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CameraScreen(
+          cameras: const [camera],
+          settings: configured,
+          apiFactory: (_) => api,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    platform.emitFrame();
+    await tester.pump();
+    expect(api.cameraFrames, isEmpty);
+    await tester.ensureVisible(find.text('HA-Livebild starten'));
+    await tester.tap(find.text('HA-Livebild starten'));
+    await tester.pump();
+    platform.emitFrame();
+    await tester.pumpAndSettle();
+    expect(api.cameraFrames.whereType<Uint8List>(), hasLength(1));
+    expect(find.text('Erkennung starten'), findsOneWidget);
+    await tester.tap(find.text('HA-Livebild stoppen'));
+    await tester.pumpAndSettle();
+    expect(api.cameraFrames.last, isNull);
+    final count = api.cameraFrames.length;
+    platform.emitFrame();
+    await tester.pumpAndSettle();
+    expect(api.cameraFrames.length, count);
+    await close(tester);
+  });
+
   testWidgets('black mode hides UI and preview without disposing the camera', (
     tester,
   ) async {
@@ -225,6 +298,67 @@ void main() {
     expect(platform.created, 1);
     await close(tester);
   });
+
+  testWidgets(
+    'guided vehicle review sends explicit confirmation without image data',
+    (tester) async {
+      const settings = OpenPlateSettings(
+        recognitionUrl: '',
+        homeAssistantWebhookUrl: 'http://ha.local/api/webhook/test',
+        deviceId: 'test',
+        captureIntervalSeconds: 1,
+        apiKey: '',
+        webhookSecret: 'x012345678901234567890123456789012',
+        registeredPlates: {'BTEST1': 'Test car'},
+        supportsVehicleVerification: true,
+      );
+      final stored = <String, String>{};
+      final verifier = VehicleVerifier(
+        settings,
+        read: (key) async => stored[key],
+        write: (key, value) async {
+          stored[key] = value;
+        },
+      );
+      final local = TestRecognizer()..withVehicle = true;
+      final api = TestApi(settings);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CameraScreen(
+            cameras: const [camera],
+            settings: settings,
+            recognizer: local,
+            apiFactory: (_) => api,
+            vehicleVerifierFactory: (_) => verifier,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Erkennung starten'));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        await tester.runAsync(() async {
+          platform.emitFrame();
+          await Future<void>.delayed(const Duration(milliseconds: 1100));
+        });
+        await tester.pumpAndSettle();
+      }
+      expect(api.sent.last.plate.vehicle!.status, 'enrollment_required');
+      await tester.ensureVisible(find.text('BTEST1 · Fahrzeug bestätigen'));
+      await tester.tap(find.text('BTEST1 · Fahrzeug bestätigen'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ist das dein Fahrzeug für BTEST1?'), findsOneWidget);
+      await tester.tap(find.text('Bestätigen'));
+      await tester.pumpAndSettle();
+      expect(verifier.profiles['BTEST1']!.references.length, 1);
+      expect(api.sent.last.plate.vehicle!.status, 'confirmed');
+      expect(
+        api.sent.last.plate.vehicle!.toJson().containsKey('embedding'),
+        isFalse,
+      );
+      await close(tester);
+    },
+  );
 
   testWidgets(
     'recognition continues in black mode and pauses in the background',

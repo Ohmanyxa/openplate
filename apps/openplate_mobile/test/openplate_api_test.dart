@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -16,6 +17,68 @@ void main() {
     captureIntervalSeconds: 1,
     apiKey: '',
     webhookSecret: '12345678901234567890123456789012',
+  );
+
+  test(
+    'camera frames negotiate capability and encrypt image and stop messages',
+    () async {
+      for (final supported in [false, true]) {
+        final received = <Map<String, dynamic>>[];
+        final jpeg = Uint8List.fromList([255, 216, 255, 217]);
+        final api = OpenPlateApi(
+          paired,
+          client: MockClient((request) async {
+            final envelope = jsonDecode(request.body) as Map<String, dynamic>;
+            final payload = await EncryptedTransport.unseal(
+              envelope,
+              paired.webhookSecret,
+              'device/request/test',
+            );
+            final configuration =
+                payload['event_type'] == 'device.configuration';
+            if (!configuration) {
+              received.add(payload);
+              expect(request.body.contains('camera.frame'), isFalse);
+              expect(request.body.contains(base64Encode(jpeg)), isFalse);
+            }
+            return http.Response(
+              jsonEncode(
+                await EncryptedTransport.seal(
+                  configuration
+                      ? {
+                          'schema_version': 1,
+                          'device_id': paired.deviceId,
+                          'home_assistant_webhook_url':
+                              paired.homeAssistantWebhookUrl,
+                          'webhook_secret': paired.webhookSecret,
+                          'capture_interval_seconds': 1,
+                          'session_id': 'session-number-12345',
+                          'capabilities': [if (supported) 'camera_jpeg_v1'],
+                        }
+                      : {'accepted': true},
+                  paired.webhookSecret,
+                  'device/response/test/${envelope['id']}/200',
+                ),
+              ),
+              200,
+            );
+          }),
+        );
+        if (!supported) {
+          await expectLater(
+            api.sendCameraFrame(jpeg, DateTime.now()),
+            throwsFormatException,
+          );
+          expect(received, isEmpty);
+        } else {
+          await api.sendCameraFrame(jpeg, DateTime.now());
+          await api.sendCameraFrame(null, DateTime.now());
+          expect(received.first['jpeg'], base64Encode(jpeg));
+          expect(received.last['event_type'], 'camera.stopped');
+          expect(received.last.containsKey('jpeg'), isFalse);
+        }
+      }
+    },
   );
 
   test('local recognition requires pairing but no recognition server', () {

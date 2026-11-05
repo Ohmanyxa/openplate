@@ -19,6 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
+from .camera_buffer import CameraBuffer
 from .configuration import mobile_configuration
 from .const import (
     CONF_ABSENCE_TIMEOUT,
@@ -29,6 +30,7 @@ from .const import (
     CONF_WEBHOOK_ID,
     DOMAIN,
     MAX_BODY_BYTES,
+    MAX_CAMERA_BODY_BYTES,
     PLATFORMS,
     SIGNATURE_MAX_AGE_SECONDS,
 )
@@ -45,6 +47,7 @@ class PlatePresence:
     present: bool = False
     motion: dict[str, Any] | None = None
     direction: str = "unknown"
+    vehicle: dict[str, Any] | None = None
 
 
 class OpenPlateManager:
@@ -59,6 +62,7 @@ class OpenPlateManager:
         self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
         self._nonces: dict[str, float] = {}
         self._session_id = secrets.token_urlsafe(24)
+        self.camera = CameraBuffer()
         self._event_ids: dict[str, float] = {}
 
     def subscribe(self, listener: Callable[[str, dict[str, Any]], None]) -> Callable[[], None]:
@@ -73,10 +77,10 @@ class OpenPlateManager:
     async def handle_webhook(
         self, _hass: HomeAssistant, _webhook_id: str, request: web.Request
     ) -> web.Response:
-        if request.content_length is not None and request.content_length > MAX_BODY_BYTES:
+        if request.content_length is not None and request.content_length > MAX_CAMERA_BODY_BYTES:
             return web.json_response({"error": "payload too large"}, status=413)
         body = await request.read()
-        if len(body) > MAX_BODY_BYTES:
+        if len(body) > MAX_CAMERA_BODY_BYTES:
             return web.json_response({"error": "payload too large"}, status=413)
         try:
             envelope = json.loads(body)
@@ -84,6 +88,8 @@ class OpenPlateManager:
             return web.json_response({"error": "invalid payload"}, status=400)
         if isinstance(envelope, dict) and envelope.get("version") == 2:
             return self._handle_encrypted(envelope)
+        if len(body) > MAX_BODY_BYTES:
+            return web.json_response({"error": "payload too large"}, status=413)
         # Legacy plaintext is accepted only for existing HTTPS configurations.
         # Re-pairing permanently opts an entry into encrypted-only transport.
         if self.config.get(CONF_TRANSPORT_VERSION, 1) != 1 or not self.config.get(
@@ -164,6 +170,13 @@ class OpenPlateManager:
         # Fresh server sessions make recorded plate messages unusable after a reload/restart.
         if payload.get("session_id") != self._session_id:
             return respond({"error": "session required"}, 428)
+        if payload.get("event_type") in {"camera.frame", "camera.stopped"}:
+            try:
+                self.camera.update(payload, now)
+            except (ValueError, TypeError, KeyError):
+                return respond({"error": "invalid camera frame"}, 400)
+            self.notify("camera", {})
+            return respond({"accepted": True})
         try:
             self._validate_payload(payload)
         except (KeyError, TypeError, ValueError):
@@ -190,6 +203,7 @@ class OpenPlateManager:
             "observations",
             "session_id",
             "motion",
+            "vehicle",
         }
         if not isinstance(payload, dict) or set(payload) - allowed:
             raise ValueError
@@ -214,6 +228,10 @@ class OpenPlateManager:
             from .motion import validate_motion
 
             validate_motion(payload["motion"])
+        if "vehicle" in payload:
+            from .vehicle import validate_vehicle
+
+            validate_vehicle(payload["vehicle"])
 
     @callback
     def process_observation(self, payload: dict[str, Any], now: float) -> None:
@@ -236,6 +254,7 @@ class OpenPlateManager:
         state.last_seen = now
         previous_direction = state.direction
         state.motion = data.get("motion")
+        state.vehicle = data.get("vehicle")
         state.direction = movement_status(state.motion)
         if state.direction in {"arrival", "departure"} and state.direction != previous_direction:
             self.notify(state.direction, {**data, "direction": state.direction})
@@ -246,11 +265,14 @@ class OpenPlateManager:
     @callback
     def check_departures(self, _now: datetime) -> None:
         current = time.time()
+        if self.camera.expire(current):
+            self.notify("camera", {})
         timeout = int(self.config[CONF_ABSENCE_TIMEOUT])
         for plate, state in self.presence.items():
             if state.present and current - state.last_seen >= timeout:
                 state.present = False
                 state.motion = None
+                state.vehicle = None
                 state.direction = "unknown"
                 data = {
                     "plate": plate,
@@ -304,14 +326,14 @@ def _remove_obsolete_entities(
     active = {
         f"{prefix}{plate}_{suffix}"
         for plate in manager.plates
-        for suffix in ("present", "direction")
+        for suffix in ("present", "direction", "vehicle")
     }
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         uid = entity.unique_id
         if entity.platform != DOMAIN or not uid.startswith(prefix):
             continue
         retired_garage = uid.startswith(f"{prefix}garage_")
-        deleted_plate = uid.endswith(("_present", "_direction")) and uid not in active
+        deleted_plate = uid.endswith(("_present", "_direction", "_vehicle")) and uid not in active
         if retired_garage or deleted_plate:
             registry.async_remove(entity.entity_id)
 

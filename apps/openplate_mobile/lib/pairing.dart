@@ -110,6 +110,8 @@ class OpenPlatePairingConfiguration {
     required this.homeAssistantWebhookUrl,
     required this.webhookSecret,
     required this.captureIntervalSeconds,
+    this.registeredPlates = const {},
+    this.supportsVehicleVerification = false,
   });
 
   final String deviceId;
@@ -118,6 +120,8 @@ class OpenPlatePairingConfiguration {
   final String homeAssistantWebhookUrl;
   final String webhookSecret;
   final int captureIntervalSeconds;
+  final Map<String, String> registeredPlates;
+  final bool supportsVehicleVerification;
 
   factory OpenPlatePairingConfiguration.fromJson(Map<String, dynamic> json) {
     final recognitionUrl = Uri.tryParse(
@@ -130,6 +134,18 @@ class OpenPlatePairingConfiguration {
     final apiKey = json['recognition_api_key'] as String? ?? '';
     final secret = json['webhook_secret'] as String? ?? '';
     final interval = json['capture_interval_seconds'];
+    final rawPlates = json['registered_plates'] ?? <String, dynamic>{};
+    if (rawPlates is! Map ||
+        rawPlates.length > 128 ||
+        rawPlates.entries.any(
+          (entry) =>
+              entry.key is! String ||
+              !RegExp(r'^[A-ZÄÖÜ0-9]{1,10}$').hasMatch(entry.key as String) ||
+              entry.value is! String ||
+              (entry.value as String).length > 128,
+        )) {
+      throw const FormatException('Ungültige Kennzeichenliste');
+    }
     if (json['schema_version'] != 1 ||
         recognitionUrl == null ||
         !((recognitionUrl.toString().isEmpty && apiKey.isEmpty) ||
@@ -154,6 +170,9 @@ class OpenPlatePairingConfiguration {
       homeAssistantWebhookUrl: webhookUrl.toString(),
       webhookSecret: secret,
       captureIntervalSeconds: interval,
+      registeredPlates: Map<String, String>.from(rawPlates),
+      supportsVehicleVerification:
+          (json['capabilities'] as List?)?.contains('vehicle_v1') ?? false,
     );
   }
 }

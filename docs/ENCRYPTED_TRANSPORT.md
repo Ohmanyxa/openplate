@@ -111,7 +111,7 @@ or out-of-bounds numbers, and classified estimates with insufficient sample coun
 The metadata is still a client assertion, not a proof of motion or an instruction to control a door.
 No actuator target is accepted from the phone. Legacy `garage_entity_id` metadata is now null;
 HA exposes per-plate presence/direction sensors and calls no actuator services. No bounding boxes
-or camera frames are transmitted. Growing plate size maps to `arrival`, shrinking to `departure`.
+or camera frames are transmitted in observation messages. Growing plate size maps to `arrival`, shrinking to `departure`.
 Observation timestamps must be timezone-aware and within 90 seconds of HA time, even inside a
 fresh encrypted envelope; stale observations cannot refresh presence.
 
@@ -134,3 +134,25 @@ path. Update both components and re-pair to rotate keys and enforce encrypted-on
 iOS reside in Keychain; HA uses its normal host storage. Since v0.7.0 the mobile app performs inference
 locally and sends no images to a separate recognition server. The optional development/reference API
 is outside this mobile device channel.
+
+## Optional camera JPEG capability
+
+`camera_jpeg_v1` in authenticated device configuration advertises camera support.
+The phone only sends images after the user enables HA live view. Messages use the
+existing v2 device encryption contexts, replay checks, device identity and fresh server
+session. Plaintext camera requests are rejected.
+
+`camera.frame` carries `schema_version: 1`, `device_id`, `session_id`, an ISO-8601 UTC
+`timestamp`, and `jpeg` (standard base64). Maximum JPEG size is 165,000 bytes on the
+sender, 220,000 base64 characters on the receiver; dimensions must be at most 640×640.
+The encrypted HTTP request limit is 400 KiB; legacy plaintext messages retain 16 KiB.
+The phone sends at most two frames/second with one encoding/upload in flight and no queue.
+Replies are encrypted acknowledgements with `accepted: true`. A 428 refreshes the session
+and drops the old frame; the next callback supplies a new one.
+
+`camera.stopped` carries the same fields except `jpeg` and clears the memory buffer.
+Camera timestamps must increase strictly and be within ten seconds of HA time, so an
+out-of-order image cannot replace a newer image or undo a stop. Only the latest image
+is kept, separate from plate events. It expires after ten seconds without a new image.
+OpenPlate does not persist images. HA serves camera images through its standard camera
+API; browser transport security and camera access control are supplied by HA.

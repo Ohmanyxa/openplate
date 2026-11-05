@@ -1,7 +1,7 @@
 name: openplate_mobile
 description: "Mounted iOS camera client for OpenPlate."
 publish_to: 'none'
-version: 0.9.1+11
+version: 0.10.0+12
 
 environment:
   sdk: ^3.11.1
@@ -27,3 +27,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/licenses/PaddleOCR-LICENSE
+    - assets/licenses/Vehicle-ReID-LICENSE
+    - assets/licenses/Intel-OpenModelZoo-LICENSE
+    - assets/models/vehicle/

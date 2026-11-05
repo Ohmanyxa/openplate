@@ -1,16 +1,29 @@
 import 'dart:async';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'camera_screen.dart';
 import 'openplate_api.dart';
-import 'pairing.dart';
 import 'settings.dart';
-import 'setup_help.dart';
+import 'app_ui.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(
+      ['Intel Open Model Zoo vehicles'],
+      'Copyright (c) Intel Corporation.\n\n${await rootBundle.loadString('assets/licenses/Intel-OpenModelZoo-LICENSE')}',
+    );
+    yield LicenseEntryWithLineBreaks([
+      'Vehicle ReID / OSNet',
+    ], await rootBundle.loadString('assets/licenses/Vehicle-ReID-LICENSE'));
+    yield LicenseEntryWithLineBreaks([
+      'PaddleOCR Latin',
+    ], await rootBundle.loadString('assets/licenses/PaddleOCR-LICENSE'));
+  });
   final cameras = await availableCameras();
   runApp(OpenPlateApp(cameras: cameras));
 }
@@ -24,10 +37,8 @@ class OpenPlateApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'OpenPlate',
-      theme: ThemeData(
-        colorSchemeSeed: Colors.green,
-        brightness: Brightness.dark,
-      ),
+      debugShowCheckedModeBanner: false,
+      theme: openPlateTheme(),
       home: HomeScreen(cameras: cameras),
     );
   }
@@ -82,6 +93,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (updated.recognitionUrl != settings.recognitionUrl ||
           updated.apiKey != settings.apiKey ||
           updated.captureIntervalSeconds != settings.captureIntervalSeconds ||
+          !mapEquals(updated.registeredPlates, settings.registeredPlates) ||
+          updated.supportsVehicleVerification !=
+              settings.supportsVehicleVerification ||
           updated.homeAssistantWebhookUrl != settings.homeAssistantWebhookUrl ||
           updated.webhookSecret != settings.webhookSecret) {
         await updated.save();
@@ -114,19 +128,17 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _pair() async {
-    final configuration = await Navigator.of(context)
-        .push<OpenPlatePairingConfiguration>(
-          MaterialPageRoute(builder: (_) => const PairingScannerScreen()),
-        );
-    if (configuration == null || !mounted) return;
-    final settings = OpenPlateSettings.fromPairing(configuration);
-    await settings.save();
-    if (mounted) {
+  Future<void> _openSettings() async {
+    final updated = await Navigator.of(context).push<OpenPlateSettings>(
+      MaterialPageRoute(builder: (_) => SettingsScreen(initial: _settings!)),
+    );
+    if (updated != null && mounted) {
       setState(() {
-        _settings = settings;
+        _settings = updated;
         _haVerified = false;
+        _configurationError = null;
       });
+      await _refreshConfiguration();
     }
   }
 
@@ -153,104 +165,205 @@ class _HomeScreenState extends State<HomeScreen> {
     if (settings == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
+    return DashboardScreen(
+      settings: settings,
+      cameraAvailable: widget.cameras.isNotEmpty,
+      verified: _haVerified,
+      connectionError: _configurationError,
+      onOpenCamera: _openCamera,
+      onOpenSettings: _openSettings,
+    );
+  }
+}
+
+/// Presentation-only dashboard; one settings entry, one camera entry.
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({
+    required this.settings,
+    required this.cameraAvailable,
+    required this.verified,
+    required this.onOpenCamera,
+    required this.onOpenSettings,
+    this.connectionError,
+    super.key,
+  });
+  final OpenPlateSettings settings;
+  final bool cameraAvailable, verified;
+  final String? connectionError;
+  final VoidCallback onOpenCamera, onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final linked = settings.isPaired;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('OpenPlate Kamera'),
+        title: const Text(
+          'OpenPlate',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         actions: [
           IconButton(
-            tooltip: 'Hilfe beim Koppeln',
-            icon: const Icon(Icons.help_outline),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => SetupHelpScreen(
-                  homeAssistantUrl: settings.homeAssistantBaseUrl,
-                ),
-              ),
-            ),
+            tooltip: 'Einstellungen',
+            onPressed: onOpenSettings,
+            icon: const Icon(Icons.tune_rounded),
           ),
+          const SizedBox(width: 8),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
             children: [
-              const Icon(Icons.videocam_outlined, size: 72),
-              const SizedBox(height: 16),
               Text(
-                'Montierte Kamera',
-                style: Theme.of(context).textTheme.headlineMedium,
-                textAlign: TextAlign.center,
+                'DEIN LOKALER KENNZEICHEN-SENSOR',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.primary,
+                  letterSpacing: 1.4,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Text(
+                cameraAvailable
+                    ? 'Bereit für deine\nEinfahrt.'
+                    : 'Kamera nicht verfügbar.',
+                style: theme.textTheme.headlineLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  height: 1.15,
+                ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Öffne die Live-Vorschau zum Ausrichten der Kamera. Im Schwarzmodus bleibt '
-                'die Kamera aktiv und das Display schwarz. Die App muss im Vordergrund bleiben.',
-                textAlign: TextAlign.center,
+              Text(
+                'Erkennen auf dem iPhone. Verbinden mit Home Assistant.',
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(
+                              alpha: .1,
+                            ),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Icon(
+                            Icons.videocam_outlined,
+                            size: 36,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Text('Live-Kamera', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 8),
+                      Text(
+                        cameraAvailable
+                            ? 'Vorschau zum Ausrichten, Schwarzmodus für den Dauerbetrieb.'
+                            : 'Prüfe die Kameraberechtigung in iOS.',
+                        style: TextStyle(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: cameraAvailable ? onOpenCamera : null,
+                        icon: const Icon(Icons.arrow_forward_rounded),
+                        label: const Text('Kamera öffnen'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        verified
+                            ? Icons.check_circle_outline
+                            : Icons.link_rounded,
+                        color: verified
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Home Assistant',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              verified
+                                  ? 'Verbunden · verschlüsselt'
+                                  : linked
+                                  ? 'Kopplung gespeichert · Verbindung wird geprüft'
+                                  : 'Noch nicht gekoppelt',
+                              style: TextStyle(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            if (!linked)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 8),
+                                child: Text(
+                                  'Kopple dein iPhone in den Einstellungen per QR-Code. Die Vorschau funktioniert auch ohne Verbindung.',
+                                ),
+                              ),
+                            if (connectionError != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  connectionError!,
+                                  style: TextStyle(
+                                    color: theme.colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
-              if (settings.isPaired) ...[
-                Text(
-                  _haVerified
-                      ? 'Home Assistant verbunden'
-                      : 'Kopplung gespeichert',
-                  textAlign: TextAlign.center,
-                ),
-                if (_configurationError != null)
-                  Text(_configurationError!, textAlign: TextAlign.center),
-                if (!settings.isComplete)
-                  const Text(
-                    'Home Assistant noch nicht gekoppelt. Die Live-Vorschau funktioniert auch ohne Kopplung. '
-                    'Detection und OCR laufen lokal auf dem iPhone; nur bestätigte Kennzeichen werden verschlüsselt gesendet.',
-                    textAlign: TextAlign.center,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.privacy_tip_outlined,
+                    size: 18,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                const SizedBox(height: 12),
-              ],
-              FilledButton.icon(
-                onPressed: widget.cameras.isEmpty ? null : _openCamera,
-                icon: const Icon(Icons.videocam_outlined),
-                label: const Text('Kamera öffnen'),
-              ),
-              if (widget.cameras.isEmpty)
-                const Text(
-                  'Keine Kamera verfügbar. Prüfe die Kameraberechtigung in iOS.',
-                ),
-              if (!settings.isPaired)
-                FilledButton.icon(
-                  onPressed: _pair,
-                  icon: const Icon(Icons.qr_code_scanner),
-                  label: const Text('iPhone per QR-Code koppeln'),
-                ),
-              if (!settings.isPaired)
-                TextButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const SetupHelpScreen(),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Die Erkennung läuft lokal. Kennzeichen und ein optional aktiviertes Livebild werden verschlüsselt an Home Assistant übertragen.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                  icon: const Icon(Icons.help_outline),
-                  label: const Text('Wo finde ich die benötigte Adresse?'),
-                ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () async {
-                  final updated = await Navigator.of(context)
-                      .push<OpenPlateSettings>(
-                        MaterialPageRoute(
-                          builder: (_) => SettingsScreen(initial: settings),
-                        ),
-                      );
-                  if (updated != null && mounted) {
-                    setState(() => _settings = updated);
-                  }
-                },
-                icon: const Icon(Icons.settings),
-                label: Text(
-                  settings.isPaired
-                      ? 'Verbindung verwalten'
-                      : 'Manuell einrichten',
-                ),
+                ],
               ),
             ],
           ),

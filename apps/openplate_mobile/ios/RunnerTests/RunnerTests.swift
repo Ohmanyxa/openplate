@@ -1,9 +1,40 @@
 import Flutter
 import UIKit
 import XCTest
+import onnxruntime_objc
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+
+  func testVehicleAssociationAndSSDDecoding() throws {
+    let car = CGRect(x: 0.1, y: 0.1, width: 0.7, height: 0.7)
+    let plate = CGRect(x: 0.3, y: 0.5, width: 0.2, height: 0.05)
+    XCTAssertTrue(NativeVehicleModels.containsPlate(car, plate))
+    XCTAssertFalse(NativeVehicleModels.containsPlate(plate, plate))
+    XCTAssertFalse(NativeVehicleModels.containsPlate(car,
+      CGRect(x: 0.9, y: 0.5, width: 0.1, height: 0.05)))
+    let locations = [Float](repeating: 0, count: 5376)
+    var priors = [Float](repeating: 0, count: 10752)
+    priors.replaceSubrange(0..<4, with: [0.1, 0.1, 0.8, 0.8])
+    var scores = [Float](repeating: 0, count: 2688)
+    scores[0] = 0.95
+    let boxes = try NativeVehicleModels.decodeSSD(locations: locations, scores: scores, priors: priors)
+    XCTAssertEqual(boxes.count, 1)
+    XCTAssertEqual(boxes[0].minX, 0.1, accuracy: 0.00001)
+    XCTAssertEqual(boxes[0].width, 0.7, accuracy: 0.00001)
+  }
+
+  func testBundledVehicleModelsProduceLocalDescriptors() throws {
+    let models = try NativeVehicleModels(ORTEnv(loggingLevel: .error))
+    let frame = BgraVideoFrame(bytes: Data(repeating: 128, count: 128 * 128 * 4),
+      width: 128, height: 128, stride: 128 * 4)
+    XCTAssertLessThanOrEqual(try models.detect(frame).count, 4)
+    let evidence = try models.describe(frame, box: CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8))
+    let vector = try XCTUnwrap(evidence["embedding"] as? [Double])
+    XCTAssertEqual(vector.count, 512)
+    XCTAssertEqual(vector.reduce(0) { $0 + $1 * $1 }, 1, accuracy: 0.00001)
+    XCTAssertNotNil(evidence["preview"] as? FlutterStandardTypedData)
+  }
 
   func testBGRAResizeHonorsPaddingAndRGBOrder() {
     let frame = BgraVideoFrame(bytes: Data([0, 0, 255, 255, 77, 77, 77, 77,
@@ -18,57 +49,77 @@ class RunnerTests: XCTestCase {
     XCTAssertEqual(input.data.count, 3 * 384 * 384 * 4)
   }
 
-  func testOCRSlotsKeepRepeatedCharacters() throws {
-    var probabilities = [Float](repeating: 0, count: 370)
-    let alphabet = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_")
-    for (i, c) in Array("BXX111____").enumerated() {
-      probabilities[i * 37 + alphabet.firstIndex(of: c)!] = 0.99
+  func testCTCDecodesUmlautsBlanksAndRepeatedDigits() throws {
+    let alphabet = LocalPlateRecognizer.latinAlphabet
+    XCTAssertEqual(alphabet.count, 838)
+    for text in ["MÜAB111", "BÖAB12", "SÄKAB123"] {
+      var probabilities = [Float]()
+      for character in text.map(String.init) {
+        let index = try XCTUnwrap(alphabet.firstIndex(of: character))
+        for best in [index, index, 0] {
+          var row = [Float](repeating: 0, count: alphabet.count)
+          row[best] = 0.99
+          probabilities += row
+        }
+      }
+      let decoded = try XCTUnwrap(LocalPlateRecognizer.decodePlate(probabilities))
+      XCTAssertEqual(decoded.text, text)
+      XCTAssertEqual(decoded.confidence, 0.99, accuracy: 0.00001)
+      probabilities[0] = .nan
+      XCTAssertThrowsError(try LocalPlateRecognizer.decodePlate(probabilities))
     }
-    let decoded = try LocalPlateRecognizer.decodePlate(probabilities)
-    XCTAssertEqual(decoded?.text, "BXX111")
-    XCTAssertEqual(decoded!.confidence, 0.99, accuracy: 0.00001)
-    probabilities[0] = .nan
-    XCTAssertThrowsError(try LocalPlateRecognizer.decodePlate(probabilities))
+    // Never drop an unsupported character to manufacture a matching German plate.
+    var unsupported = [Float](repeating: 0, count: alphabet.count)
+    unsupported[try XCTUnwrap(alphabet.firstIndex(of: "À"))] = 0.99
+    XCTAssertNil(try LocalPlateRecognizer.decodePlate(unsupported))
   }
 
-  func testUmlautsRequireMatchingIndependentImageReading() {
-    for (plain, german) in [("MUB123", "MÜB123"), ("OAB12", "ÖAB12"), ("AAB12", "ÄAB12")] {
-      let result = LocalPlateRecognizer.mergeUmlautReading((plain, 0.96),
-        candidates: [(german, 0.9)])
-      XCTAssertEqual(result.text, german)
-      XCTAssertEqual(result.confidence, 0.9)
+  func testLatinPreprocessingBGRNormalizationAndRightPadding() {
+    let frame = BgraVideoFrame(bytes: Data([0, 0, 255, 255]), width: 1, height: 1, stride: 4)
+    let input = frame.latinOCRInput(x: 0, y: 0, width: 1, height: 1)
+    let floats = input.withUnsafeBytes { raw in
+      (0..<(input.count / 4)).map { raw.loadUnaligned(fromByteOffset: $0 * 4, as: Float.self) }
     }
-    let plain = (text: "MUB123", confidence: 0.96)
-    XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(plain,
-      candidates: [("MU\u{0308} B-123", 0.9)]).text, "MÜB123")
-    for candidates: [(String, Double)] in [[], [("MÜB123", 0.7)], [("MÜB124", 0.99)],
-                                          [("MÜB123", .nan)], [("MÙB123", 0.99)]] {
-      XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(plain, candidates: candidates).text, plain.text)
-    }
-    XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading(("AUB12", 0.95),
-      candidates: [("ÄUB12", 0.9), ("AÜB12", 0.9)]).text, "AUB12")
+    XCTAssertEqual(floats.count, 3 * 48 * 320)
+    XCTAssertEqual(floats[0], -1) // B
+    XCTAssertEqual(floats[48 * 320], -1) // G
+    XCTAssertEqual(floats[2 * 48 * 320], 1) // R
+    XCTAssertEqual(floats[48], 0) // zero padding, not black (-1)
   }
 
-  /// Synthetic rendering tests the Vision path, not real German-plate accuracy.
-  func testLocalVisionReadsRenderedGermanUmlauts() throws {
+  func testPinnedLatinModelReadsRenderedGermanUmlauts() async throws {
+    try XCTSkipUnless(ProcessInfo.processInfo.environment["OPENPLATE_MODEL_TESTS"] == "1")
+    let recognizer = LocalPlateRecognizer()
+    try recognizer.loadModels(await LocalModelStore.prepare())
     for text in ["MÜ AB123", "BÖ AB123", "SÄK AB123"] {
+      let attributes: [NSAttributedString.Key: Any] = [
+        .font: UIFont.monospacedSystemFont(ofSize: 110, weight: .medium),
+        .foregroundColor: UIColor.black,
+      ]
+      // Match the tightly detected plate crop, not a wide canvas with empty margins.
+      let extent = (text as NSString).size(withAttributes: attributes)
+      let size = CGSize(width: ceil(extent.width) + 24, height: ceil(extent.height) + 12)
       let format = UIGraphicsImageRendererFormat()
       format.scale = 1
-      let image = UIGraphicsImageRenderer(size: CGSize(width: 1000, height: 180), format: format).image { _ in
+      let image = UIGraphicsImageRenderer(size: size, format: format).image { _ in
         UIColor.white.setFill()
-        UIRectFill(CGRect(x: 0, y: 0, width: 1000, height: 180))
-        (text as NSString).draw(at: CGPoint(x: 35, y: 15), withAttributes: [
-          .font: UIFont.monospacedSystemFont(ofSize: 110, weight: .medium),
-          .foregroundColor: UIColor.black,
-        ])
+        UIRectFill(CGRect(origin: .zero, size: size))
+        (text as NSString).draw(at: CGPoint(x: 12, y: 6), withAttributes: attributes)
       }
-      let candidates = try LocalPlateRecognizer.germanTextCandidates(XCTUnwrap(image.cgImage))
-      let base = text.replacingOccurrences(of: " ", with: "")
-        .replacingOccurrences(of: "Ü", with: "U").replacingOccurrences(of: "Ö", with: "O")
-        .replacingOccurrences(of: "Ä", with: "A")
-      XCTAssertEqual(LocalPlateRecognizer.mergeUmlautReading((base, 0.99), candidates: candidates).text,
-                     text.replacingOccurrences(of: " ", with: ""))
+      let frame = try bgraFrame(XCTUnwrap(image.cgImage))
+      let reading = try XCTUnwrap(recognizer.readPlate(frame))
+      print("Synthetic Latin OCR: \(text) → \(reading.text)")
+      XCTAssertEqual(reading.text, text.replacingOccurrences(of: " ", with: ""))
     }
+  }
+
+  private func bgraFrame(_ image: CGImage) throws -> BgraVideoFrame {
+    var pixels = [UInt8](repeating: 0, count: image.width * image.height * 4)
+    let context = try XCTUnwrap(CGContext(data: &pixels, width: image.width, height: image.height,
+      bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    return BgraVideoFrame(bytes: Data(pixels), width: image.width, height: image.height, stride: image.width * 4)
   }
 
   /// Explicit opt-in downloads pinned models and a public upstream smoke image.
@@ -86,8 +137,9 @@ class RunnerTests: XCTestCase {
       bitsPerComponent: 8, bytesPerRow: image.width * 4, space: CGColorSpaceCreateDeviceRGB(),
       bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.premultipliedFirst.rawValue))
     context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
-    let readings = try recognizer.recognize(BgraVideoFrame(bytes: Data(bgra), width: image.width,
-      height: image.height, stride: image.width * 4))
+    let frame = BgraVideoFrame(bytes: Data(bgra), width: image.width,
+      height: image.height, stride: image.width * 4)
+    let readings = try recognizer.recognize(frame)
     XCTAssertEqual(readings.compactMap { $0["plate"] as? String }, ["5AU5341"],
       "Native decoding must match the Python ONNX reference for this exact smoke image")
     let boxes = readings.compactMap { $0["box"] as? [Double] }
@@ -99,6 +151,12 @@ class RunnerTests: XCTestCase {
       XCTAssertLessThanOrEqual(box[1] + box[3], 1)
     }
     XCTAssertTrue(readings.allSatisfy { ($0["plate"] as? String)?.isEmpty == false })
+    recognizer.configureVehiclePlates(["5AU5341"])
+    let verified = try recognizer.recognize(frame)
+    let vehicle = try XCTUnwrap(verified.first?["vehicle"] as? [String: Any],
+      "A known plate must be associated with the full visible car in the upstream scene")
+    XCTAssertEqual((vehicle["embedding"] as? [Double])?.count, 512)
+    XCTAssertNotNil(vehicle["preview"] as? FlutterStandardTypedData)
   }
 
 }

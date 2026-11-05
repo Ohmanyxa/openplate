@@ -5,17 +5,25 @@ import 'openplate_api.dart';
 import 'video_frame.dart';
 import 'plate_identity.dart';
 import 'plate_motion.dart';
+import 'vehicle_verification.dart';
 
 class PlateObservation {
-  const PlateObservation(this.plate, this.confidence, {this.box});
+  const PlateObservation(this.plate, this.confidence, {this.box, this.vehicle});
   final String plate;
   final double confidence;
   final PlateBox? box;
+  final VehicleEvidence? vehicle;
 }
 
 /// Device-local boundary. There is deliberately no HTTP/image-upload fallback.
 class LocalPlateRecognizer {
   static const channel = MethodChannel('openplate/local_recognition');
+
+  Future<void> configureVehicles(Iterable<String> plates) async {
+    await channel.invokeMethod<void>('configureVehicles', {
+      'plates': plates.toList(),
+    });
+  }
 
   Future<String> initialize() async =>
       await channel.invokeMethod<String>('initialize') ?? 'Lokale Erkennung';
@@ -37,6 +45,9 @@ class LocalPlateRecognizer {
           return PlateObservation(
             reading['plate'] as String,
             (reading['confidence'] as num).toDouble(),
+            vehicle: reading['vehicle'] is Map
+                ? VehicleEvidence.fromJson(reading['vehicle'] as Map)
+                : null,
             box: box != null && box.length == 4
                 ? PlateBox(
                     (box[0] as num).toDouble(),

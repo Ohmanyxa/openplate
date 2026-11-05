@@ -1,7 +1,7 @@
 """Constants for OpenPlate."""
 
 DOMAIN = "openplate"
-PLATFORMS = ["binary_sensor", "event", "sensor"]
+PLATFORMS = ["binary_sensor", "camera", "event", "sensor"]
 
 CONF_DEVICE_ID = "device_id"
 CONF_SECRET = "secret"
@@ -20,3 +20,5 @@ MAX_BODY_BYTES = 16 * 1024
 SIGNATURE_MAX_AGE_SECONDS = 90
 PAIRING_CODE_LIFETIME_SECONDS = 10 * 60
 PAIRING_WEBHOOK_ID = "openplate_pairing"
+
+MAX_CAMERA_BODY_BYTES = 400 * 1024

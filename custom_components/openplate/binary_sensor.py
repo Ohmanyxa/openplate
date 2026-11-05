@@ -32,4 +32,5 @@ class OpenPlatePresenceSensor(OpenPlateEntity, BinarySensorEntity):
             "display_name": self.manager.plates[self.plate],
             "motion": motion,
             "direction": self.manager.presence[self.plate].direction,
+            "vehicle": self.manager.presence[self.plate].vehicle,
         }

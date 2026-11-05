@@ -7,7 +7,7 @@ plate crop.
 
 The repository also contains the first mounted-camera vertical slice:
 
-- `apps/openplate_mobile`: Flutter/iOS client with on-device ONNX detection/OCR, local temporal confirmation, live preview and black mode. Frames never leave the phone.
+- `apps/openplate_mobile`: Flutter/iOS client with on-device ONNX detection/OCR, local temporal confirmation, live preview and black mode. Frames stay local unless encrypted HA live view is explicitly enabled.
 - `openplate-server`: optional development/reference API, not used by the iPhone app or required by HA.
 - `custom_components/openplate`: HACS-compatible signed webhook integration and HA entities.
 
@@ -50,7 +50,7 @@ server settings and registered plates are not required for pairing.
 Under **Configure**, manage registered plates or adjust **On-device recognition**. Detection, OCR and
 three-frame confirmation run on the iPhone CPU using ONNX Runtime 1.30.0. The first recognition start
 downloads about 11 MB of hash-verified models; subsequent inference is offline. iOS 15.1+ is required.
-Core ML acceleration is not enabled. No model runs in HA and no image is sent off the phone.
+Core ML acceleration is not enabled. No model runs in HA. Optional live view sends encrypted camera images to paired HA.
 The paired app retrieves settings automatically within about 15 seconds without another scan.
 
 The iPhone **Kamera öffnen** button always offers local preview, even without a recognition server.
@@ -98,7 +98,7 @@ assessment, [ARCHITECTURE.md](ARCHITECTURE.md) for component boundaries, and
 ## Privacy and limitations
 
 The still-image CLI transmits nothing. The mounted-camera client processes frames locally and sends
-only confirmed plate strings and metadata encrypted to Home Assistant. A matching plate
+confirmed plate strings and metadata encrypted to Home Assistant. Optional live view additionally sends encrypted images to paired HA. A matching plate
 must never by itself authorize a garage door or other security-sensitive action. Core ML acceleration,
 ROI calibration and direction detection remain unimplemented. Local iOS CPU inference is implemented;
 physical-device German-plate accuracy, temperature and sustained throughput still need measurement.

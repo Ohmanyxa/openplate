@@ -7,6 +7,7 @@ import 'package:openplate_mobile/openplate_api.dart';
 import 'package:openplate_mobile/pairing.dart';
 import 'package:openplate_mobile/settings.dart';
 import 'package:openplate_mobile/plate_motion.dart';
+import 'package:openplate_mobile/vehicle_verification.dart';
 
 class RecordingClient extends http.BaseClient {
   final inner = http.Client();
@@ -42,6 +43,8 @@ void main() {
       expect(settings.isPaired, isTrue);
       expect(settings.homeAssistantWebhookUrl.startsWith('http://'), isTrue);
       expect(settings.isComplete, isTrue);
+      expect(settings.registeredPlates, {'BTEST1': 'Test'});
+      expect(settings.supportsVehicleVerification, isTrue);
       final api = OpenPlateApi(settings, client: client);
       await api.refreshConfiguration();
       final event = PendingPlateEvent.fromPlate(
@@ -50,6 +53,14 @@ void main() {
           confidence: 0.97,
           observations: 3,
           newEvent: true,
+          vehicle: VehicleAssessment(
+            'match',
+            type: 'car',
+            color: 'white',
+            similarity: .95,
+            mode: 'comparison',
+            referenceCount: 6,
+          ),
           motion: PlateMotion(
             direction: 'approaching',
             dx: .01,
@@ -76,6 +87,12 @@ void main() {
       expect(state['last_event']['plate'], 'BTEST1');
       expect(state['last_event']['motion']['direction'], 'approaching');
       expect(state['last_event']['motion']['scale_rate'], .08);
+      expect(state['last_event']['vehicle']['status'], 'match');
+      expect(state['last_event']['vehicle']['reference_count'], 6);
+      expect(
+        (state['last_event']['vehicle'] as Map).containsKey('embedding'),
+        isFalse,
+      );
       expect(
         (state['last_event'] as Map<String, dynamic>).containsKey('session_id'),
         isFalse,
