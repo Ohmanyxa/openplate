@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openplate_mobile/app_ui.dart';
 import 'package:openplate_mobile/main.dart';
+import 'package:openplate_mobile/openplate_api.dart';
+import 'package:camera/camera.dart';
 import 'package:openplate_mobile/settings.dart';
 
 const paired = OpenPlateSettings(
@@ -18,6 +20,16 @@ const paired = OpenPlateSettings(
   apiKey: '',
   webhookSecret: 'private-key-012345678901234567890123456789',
 );
+
+class OfflineApi extends OpenPlateApi {
+  OfflineApi(super.settings);
+  int refreshes = 0;
+  @override
+  Future<OpenPlateSettings> refreshConfiguration() async {
+    refreshes++;
+    throw const HttpException('HA offline');
+  }
+}
 
 void main() {
   final screenshots = Platform.environment['OPENPLATE_UI_SCREENSHOTS'];
@@ -53,6 +65,84 @@ void main() {
     ).writeAsBytes(data!.buffer.asUint8List());
     image.dispose();
   }
+
+  testWidgets(
+    'saved pairing opens camera immediately even if HA is offline; explicit close stays closed',
+    (tester) async {
+      final api = OfflineApi(paired);
+      var opens = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            cameras: const [
+              CameraDescription(
+                name: 'back',
+                lensDirection: CameraLensDirection.back,
+                sensorOrientation: 90,
+              ),
+            ],
+            settingsLoader: () async => paired,
+            apiFactory: (_) => api,
+            cameraBuilder: (_) {
+              opens++;
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text('Automatisch gestartete Kamera'),
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Automatisch gestartete Kamera'), findsOneWidget);
+      expect(opens, 1);
+      expect(api.refreshes, 0);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(find.text('Automatisch gestartete Kamera'), findsNothing);
+      expect(find.text('Kamera öffnen'), findsOneWidget);
+      expect(opens, 1);
+      expect(api.refreshes, 1);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'without pairing the app keeps setup visible and does not start a camera',
+    (tester) async {
+      var opens = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            cameras: const [
+              CameraDescription(
+                name: 'back',
+                lensDirection: CameraLensDirection.back,
+                sensorOrientation: 90,
+              ),
+            ],
+            settingsLoader: () async => const OpenPlateSettings(
+              recognitionUrl: '',
+              homeAssistantWebhookUrl: '',
+              deviceId: 'unpaired',
+              captureIntervalSeconds: 1,
+              apiKey: '',
+              webhookSecret: '',
+            ),
+            cameraBuilder: (_) {
+              opens++;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(opens, 0);
+      expect(find.byTooltip('Einstellungen'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets('dashboard has one settings entry and one camera action', (
     tester,

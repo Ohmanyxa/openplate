@@ -13,8 +13,9 @@ import 'app_ui.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   LicenseRegistry.addLicense(() async* {
-    yield LicenseEntryWithLineBreaks(['WebRTC SDK'],
-      await rootBundle.loadString('assets/licenses/WebRTC-LICENSE'));
+    yield LicenseEntryWithLineBreaks([
+      'WebRTC SDK',
+    ], await rootBundle.loadString('assets/licenses/WebRTC-LICENSE'));
     yield LicenseEntryWithLineBreaks(
       ['Intel Open Model Zoo vehicles'],
       'Copyright (c) Intel Corporation.\n\n${await rootBundle.loadString('assets/licenses/Intel-OpenModelZoo-LICENSE')}',
@@ -47,9 +48,18 @@ class OpenPlateApp extends StatelessWidget {
 }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({required this.cameras, super.key});
+  const HomeScreen({
+    required this.cameras,
+    this.settingsLoader,
+    this.cameraBuilder,
+    this.apiFactory,
+    super.key,
+  });
 
   final List<CameraDescription> cameras;
+  final Future<OpenPlateSettings> Function()? settingsLoader;
+  final Widget Function(OpenPlateSettings)? cameraBuilder;
+  final OpenPlateApi Function(OpenPlateSettings)? apiFactory;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -61,6 +71,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _refreshing = false;
   String? _configurationError;
   bool _cameraOpen = false;
+  bool _automaticCameraOpened = false;
   bool _haVerified = false;
 
   @override
@@ -74,9 +85,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
-    final settings = await OpenPlateSettings.load();
-    if (mounted) setState(() => _settings = settings);
+    final settings =
+        await (widget.settingsLoader?.call() ?? OpenPlateSettings.load());
+    if (!mounted) return;
+    setState(() => _settings = settings);
+    if (_scheduleAutomaticCamera()) return;
     await _refreshConfiguration();
+  }
+
+  bool _scheduleAutomaticCamera() {
+    final settings = _settings;
+    if (_automaticCameraOpened ||
+        _cameraOpen ||
+        settings == null ||
+        !settings.isPaired ||
+        widget.cameras.isEmpty) {
+      return false;
+    }
+    _automaticCameraOpened = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_cameraOpen) unawaited(_openCamera());
+    });
+    return true;
   }
 
   Future<void> _refreshConfiguration() async {
@@ -90,7 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     _refreshing = true;
     try {
-      final updated = await OpenPlateApi(settings).refreshConfiguration();
+      final updated =
+          await (widget.apiFactory?.call(settings) ?? OpenPlateApi(settings))
+              .refreshConfiguration();
       if (!mounted || !identical(settings, _settings)) return;
       if (updated.supportsWebRTC != settings.supportsWebRTC ||
           updated.liveCamera != settings.liveCamera ||
@@ -142,18 +174,20 @@ class _HomeScreenState extends State<HomeScreen> {
         _haVerified = false;
         _configurationError = null;
       });
-      await _refreshConfiguration();
+      if (!_scheduleAutomaticCamera()) await _refreshConfiguration();
     }
   }
 
   Future<void> _openCamera() async {
     final settings = _settings;
-    if (settings == null) return;
+    if (settings == null || _cameraOpen) return;
+    _automaticCameraOpened = true;
     _cameraOpen = true;
     try {
       await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) =>
+              widget.cameraBuilder?.call(settings) ??
               CameraScreen(cameras: widget.cameras, settings: settings),
         ),
       );

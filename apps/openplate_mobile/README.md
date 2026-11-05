@@ -20,7 +20,8 @@ configuring a recognition server. It neither takes still photos nor uploads fram
 connection and recognition status are displayed separately; saved pairing data alone is not shown as
 a verified live connection.
 
-After pairing, tap **Erkennung starten**. The first start downloads about 11 MB of pinned models over
+With a saved pairing, app launch automatically opens the camera and starts recognition.
+After temporarily stopping recognition, **Erkennung starten** resumes it manually. The first start downloads about 11 MB of pinned models over
 HTTPS and verifies their SHA-256 hashes. Subsequent recognition works offline on the iPhone CPU via
 ONNX Runtime 1.30.0, not yet Core ML/Neural Engine. iOS 15.1+ is required.
 By default camera frames stay local; confirmed plate strings and metadata go encrypted to HA.
@@ -54,7 +55,8 @@ Upgrade both components and pair again when upgrading to v0.5.0 to enable encryp
 
 ## App navigation
 
-The dashboard shows camera readiness and authenticated HA connection status. There is one
+With saved pairing, the app opens the camera directly. Before pairing or after explicitly
+closing the camera, the dashboard shows camera readiness and authenticated HA connection status. There is one
 **Camera open** action and one **Settings** entry in the top bar. Pairing is available only
 under Settings → Connection; the QR imports all credentials. Manual webhook/key/device-ID
 editing has been removed. Existing stored pairings remain usable.
@@ -158,3 +160,24 @@ Upgrade both components. The existing pairing and camera ID remain; the integrat
 the camera from JPEG to WebRTC after the new app connects. Use HA's live camera view rather
 than the five-second JPEG thumbnail. The device must be reachable directly from the viewer;
 OpenPlate supplies no TURN relay. [Full setup and limits](../../docs/REALTIME_VIDEO.md).
+
+## Automatic startup and iOS lifecycle
+
+Once pairing is saved, launching the app opens the camera without tapping the dashboard.
+Local recognition starts as soon as the camera and models are ready. Initial model download
+failures are retried after 30 seconds while the camera screen remains in the foreground.
+The first camera/model startup does not wait for HA to be reachable; cached pairing and settings
+are sufficient. Live video follows the central HA enable/disable setting. Preview thumbnails
+wait for a successful configuration refresh so a stale saved live setting cannot start an upload.
+
+Backgrounding or locking an iPhone pauses camera capture. Returning to the app recreates the
+camera and resumes the requested recognition/live state automatically, including when the
+first model load was interrupted. Explicitly stopping recognition stays stopped for that camera
+screen; explicitly closing the camera returns to the dashboard without an immediate reopen loop.
+A fresh app launch starts automatically again. Before pairing the setup dashboard remains visible.
+
+For a mounted iPhone use black mode and, if desired, iOS Guided Access. Wakelock prevents automatic
+screen locking while the camera is foregrounded. Black mode is an app surface, not the lock screen.
+No VoIP/audio background mode or unsupported camera entitlement is declared to simulate continuous
+background surveillance. Apple documents background camera interruption and separate multitasking
+exceptions: https://developer.apple.com/documentation/avfoundation/avcapturesession/interruptionreason/videodevicenotavailableinbackground

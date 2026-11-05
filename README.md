@@ -57,10 +57,12 @@ The optional H.264/WebRTC live camera is configured centrally in HA (enable, 12/
 as a target, 480p/720p). Update both components and use HA's live view; the JPEG thumbnail
 is not the video stream. [Setup and limits](docs/REALTIME_VIDEO.md).
 
-The iPhone **Kamera öffnen** button always offers local preview, even without a recognition server.
-Start frame processing explicitly with **Erkennung starten**. **Schwarzmodus** hides the app surface
+With a saved pairing, opening the iPhone app automatically opens the camera and starts local
+recognition. HA-enabled live view starts with it; a failed initial HA request does not delay capture.
+Before pairing, **Kamera öffnen** still offers a local preview without a recognition server. **Schwarzmodus** hides the app surface
 while the camera and any running recognition continue; tap to reveal controls and return to preview.
-The app must stay in the foreground. See [camera controls](apps/openplate_mobile/README.md#live-preview-and-black-mode).
+iOS backgrounding or locking pauses the camera; returning to the foreground resumes it automatically.
+Keep the app in the foreground for continuous operation. See [camera controls](apps/openplate_mobile/README.md#live-preview-and-black-mode).
 
 The QR carries a temporary random 256-bit key, valid for one pairing and at most ten minutes.
 That key is never sent in a network request. Pairing, configuration and plate events use AES-256-GCM

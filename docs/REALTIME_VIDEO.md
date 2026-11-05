@@ -4,8 +4,8 @@
 
 1. HA-Integration und iPhone-App gemeinsam auf einen Stand mit `camera_webrtc_v1` aktualisieren.
    Die vorhandene Kopplung und Kamera-Unique-ID bleiben erhalten.
-2. Die iPhone-App mit geöffneter Kamera im Vordergrund lassen. Die lokale Erkennung wird
-   weiterhin unabhängig gestartet; Schwarzmodus führt Aufnahme und Erkennung weiter aus.
+2. Die iPhone-App im Vordergrund lassen. Bei gespeicherter Kopplung starten Kamera und
+   Erkennung automatisch; Schwarzmodus führt Aufnahme und Erkennung weiter aus.
 3. In HA unter **OpenPlate → Konfigurieren → Kamera und Verbindung → Livebild (WebRTC)**
    das Livebild aktivieren. Standard: ausgeschaltet, Ziel 24 FPS, 720p. Alternativ 12/15 FPS
    oder 480p wählen. Die App übernimmt Änderungen beim nächsten Konfigurationsabruf
@@ -51,8 +51,9 @@ die regelmäßige Bereinigung läuft alle fünf Sekunden. Unbeantwortete Offers 
 
 ## Betrieb und Grenzen
 
-- Die iPhone-App muss im Vordergrund mit geöffneter Kamera bleiben. Hintergrundwechsel stoppt
-  Medien und Kamera; beim Zurückkehren gelten wieder die zentralen HA-Einstellungen.
+- Die iPhone-App öffnet nach gespeicherter Kopplung Kamera und Erkennung automatisch. Sie muss
+  für Dauerbetrieb im Vordergrund bleiben. Hintergrundwechsel oder Sperren stoppt Medien und
+  Kamera; beim Zurückkehren startet der angeforderte Betrieb automatisch wieder.
 - Neue HA-Integration mit alter iPhone-App behält zunächst die bisherige JPEG-Kamera. Erst eine
   gültige Signalisierungsanfrage der neuen App stellt diese Kamera automatisch auf WebRTC um.
 - Das iPhone verwendet keine fest hinterlegten öffentlichen STUN-/TURN-Dienste. Der HA-Browser

@@ -25,6 +25,7 @@ class CameraScreen extends StatefulWidget {
     required this.settings,
     this.apiFactory,
     this.recognizer,
+    this.autoStartRecognition = true,
     this.vehicleVerifierFactory,
     super.key,
   });
@@ -33,6 +34,7 @@ class CameraScreen extends StatefulWidget {
   final OpenPlateSettings settings;
   final OpenPlateApi Function(OpenPlateSettings)? apiFactory;
   final LocalPlateRecognizer? recognizer;
+  final bool autoStartRecognition;
   final VehicleVerifier Function(OpenPlateSettings)? vehicleVerifierFactory;
 
   @override
@@ -45,6 +47,7 @@ class _CameraScreenState extends State<CameraScreen>
   RealtimeCamera? _realtime;
   Timer? _realtimeTimer;
   bool _readingRealtimeFrame = false;
+  bool _haConfigurationVerified = false;
   bool get _cameraReady =>
       (_realtime?.ready ?? false) ||
       (_controller?.value.isInitialized ?? false);
@@ -66,6 +69,7 @@ class _CameraScreenState extends State<CameraScreen>
             now - _lastFrame! >=
                 Duration(seconds: _settings.captureIntervalSeconds));
     final thumbnail =
+        _haConfigurationVerified &&
         _streaming &&
         !_sendingFrame &&
         !_stoppingStream &&
@@ -111,6 +115,9 @@ class _CameraScreenState extends State<CameraScreen>
   (int, int)? _motionFrameSize;
   String _motionStatus = 'Richtung unbekannt';
   bool _startingRecognition = false;
+  late bool _recognitionWanted =
+      widget.autoStartRecognition && widget.settings.isPaired;
+  Timer? _recognitionRetryTimer;
   bool _modelsReady = false;
   bool _sendingEvents = false;
   bool _streaming = false;
@@ -360,6 +367,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   void _queueCamera(bool open) {
+    _haConfigurationVerified = false;
     final generation = ++_generation;
     _processingEpoch++;
     _confirmation.reset();
@@ -416,6 +424,7 @@ class _CameraScreenState extends State<CameraScreen>
             _streaming = _settings.liveCamera.enabled;
             _cameraStatus = 'Kamera aktiv · gemeinsame WebRTC-Aufnahme';
           });
+          unawaited(_ensureRecognitionStarted());
           _realtimeTimer = Timer.periodic(
             const Duration(milliseconds: 100),
             (_) => unawaited(_onRealtimeFrame()),
@@ -449,6 +458,7 @@ class _CameraScreenState extends State<CameraScreen>
           _cameraStatus = 'Kamera aktiv';
         });
         await controller.startImageStream(_onVideoFrame);
+        unawaited(_ensureRecognitionStarted());
       } on Object catch (error) {
         if (mounted && generation == _generation) {
           setState(() {
@@ -494,6 +504,7 @@ class _CameraScreenState extends State<CameraScreen>
         _resetFrameAdmission();
         if (cameraChanged) _queueCamera(_foreground);
       }
+      _haConfigurationVerified = true;
       await _configureVehicles();
       setState(() => _haStatus = 'Home Assistant verbunden');
     } on Object {
@@ -547,46 +558,75 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _toggleRecognition() async {
-    if (!_settings.isComplete || !_cameraReady || _startingRecognition) {
+    _recognitionWanted = !_recognizing;
+    _recognitionRetryTimer?.cancel();
+    if (!_recognitionWanted) {
+      setState(() {
+        _recognizing = false;
+        _recognitionStatus = 'Erkennung ausgeschaltet';
+      });
+      _resetFrameAdmission();
       return;
     }
-    if (!_recognizing && !_modelsReady) {
+    await _ensureRecognitionStarted();
+  }
+
+  Future<void> _ensureRecognitionStarted() async {
+    if (!mounted ||
+        !_recognitionWanted ||
+        _recognizing ||
+        !_foreground ||
+        !_settings.isComplete ||
+        !_cameraReady ||
+        _startingRecognition) {
+      return;
+    }
+    _recognitionRetryTimer?.cancel();
+    if (!_modelsReady) {
       setState(() {
         _startingRecognition = true;
         _recognitionStatus =
-            'Lokale Modelle werden geladen. Erster Start benötigt Internet (ca. 11 MB).';
+            'Lokale Modelle werden automatisch geladen. Erster Start benötigt Internet (ca. 11 MB).';
       });
       try {
         await _local.initialize();
+        if (!mounted) return;
         await _configureVehicles();
         _modelsReady = true;
       } on Object catch (error) {
         if (mounted) {
           setState(() {
             _startingRecognition = false;
-            _recognitionStatus = error is PlatformException
+            final reason = error is PlatformException
                 ? error.message ??
                       'Lokale Modelle konnten nicht gestartet werden'
                 : 'Lokale Erkennung nicht verfügbar. iOS-App verwenden und Modell-Download prüfen.';
+            _recognitionStatus =
+                '$reason · Automatischer neuer Versuch in 30 Sekunden.';
           });
+          if (_recognitionWanted && _foreground) {
+            _recognitionRetryTimer = Timer(
+              const Duration(seconds: 30),
+              () => unawaited(_ensureRecognitionStarted()),
+            );
+          }
         }
         return;
       }
       if (!mounted) return;
       _startingRecognition = false;
-      if (!_foreground || !_cameraReady) {
-        setState(
-          () =>
-              _recognitionStatus = 'Lokale Modelle bereit · Erkennung starten',
-        );
-        return;
-      }
+    }
+    if (!_foreground || !_cameraReady || !_recognitionWanted) {
+      setState(
+        () => _recognitionStatus = _recognitionWanted
+            ? 'Modelle bereit · automatischer Start, sobald die Kamera verfügbar ist'
+            : 'Erkennung ausgeschaltet',
+      );
+      return;
     }
     setState(() {
-      _recognizing = !_recognizing;
-      _recognitionStatus = _recognizing
-          ? 'Lokale Erkennung aktiv · ONNX Runtime / iPhone CPU'
-          : 'Erkennung ausgeschaltet';
+      _recognizing = true;
+      _recognitionStatus = 'Lokale Erkennung aktiv · ONNX Runtime / iPhone CPU';
     });
     _resetFrameAdmission();
   }
@@ -765,7 +805,10 @@ class _CameraScreenState extends State<CameraScreen>
       unawaited(_refreshConfiguration());
     } else {
       unawaited(_stopLiveImage());
-      setState(() => _cameraStatus = 'Pausiert – App im Vordergrund öffnen');
+      setState(
+        () => _cameraStatus =
+            'iOS pausiert die Kamera · automatischer Neustart beim Öffnen',
+      );
     }
   }
 
@@ -773,9 +816,11 @@ class _CameraScreenState extends State<CameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _configurationTimer?.cancel();
+    _recognitionRetryTimer?.cancel();
     _realtimeTimer?.cancel();
     _hideControlsTimer?.cancel();
     _foreground = false;
+    _recognitionWanted = false;
     _streaming = false;
     unawaited(_stopLiveImage());
     _queueCamera(false);

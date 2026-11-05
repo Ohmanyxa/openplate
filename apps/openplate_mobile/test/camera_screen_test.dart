@@ -143,8 +143,19 @@ class TestRecognizer extends LocalPlateRecognizer {
   @override
   Future<void> configureVehicles(Iterable<String> plates) async {}
   int recognitions = 0;
+  int initializations = 0;
+  bool failInitialization = false;
+  Completer<void>? initializationGate;
   @override
-  Future<String> initialize() async => 'local test backend';
+  Future<String> initialize() async {
+    initializations++;
+    await initializationGate?.future;
+    if (failInitialization) {
+      throw PlatformException(code: 'model_download', message: 'Offline');
+    }
+    return 'local test backend';
+  }
+
   @override
   Future<List<PlateObservation>> recognize(VideoFrame frame) async {
     recognitions++;
@@ -205,11 +216,117 @@ void main() {
   }
 
   testWidgets(
+    'paired camera starts recognition automatically and resumes without another model load',
+    (tester) async {
+      final local = TestRecognizer();
+      final api = TestApi(configured);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CameraScreen(
+            cameras: const [camera],
+            settings: configured,
+            recognizer: local,
+            apiFactory: (_) => api,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(local.initializations, 1);
+      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      platform.emitFrame();
+      await tester.pumpAndSettle();
+      expect(local.recognitions, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pumpAndSettle();
+      expect(platform.disposed, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(platform.created, 2);
+      expect(local.initializations, 1);
+      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      await close(tester);
+    },
+  );
+
+  testWidgets(
+    'model initialization interrupted by backgrounding starts recognition when ready',
+    (tester) async {
+      final gate = Completer<void>();
+      final local = TestRecognizer()..initializationGate = gate;
+      final api = TestApi(configured);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CameraScreen(
+            cameras: const [camera],
+            settings: configured,
+            recognizer: local,
+            apiFactory: (_) => api,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(local.initializations, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pumpAndSettle();
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Erkennung stoppen'), findsNothing);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(local.initializations, 1);
+      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      await close(tester);
+    },
+  );
+
+  testWidgets(
+    'automatic model startup retries after a transient download failure',
+    (tester) async {
+      final local = TestRecognizer()..failInitialization = true;
+      final api = TestApi(configured);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CameraScreen(
+            cameras: const [camera],
+            settings: configured,
+            recognizer: local,
+            apiFactory: (_) => api,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(local.initializations, 1);
+      expect(
+        find.textContaining('Automatischer neuer Versuch'),
+        findsOneWidget,
+      );
+      local.failInitialization = false;
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pumpAndSettle();
+      expect(local.initializations, 2);
+      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      await close(tester);
+    },
+  );
+
+  testWidgets(
     'preview opens without a server and never takes or uploads a photo',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(cameras: [camera], settings: previewOnly),
+          home: CameraScreen(
+            autoStartRecognition: false,
+            cameras: [camera],
+            settings: previewOnly,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -243,6 +360,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: CameraScreen(
+          autoStartRecognition: false,
           cameras: const [camera],
           settings: configured,
           apiFactory: (_) => api,
@@ -275,7 +393,11 @@ void main() {
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: CameraScreen(cameras: [camera], settings: previewOnly),
+        home: CameraScreen(
+          autoStartRecognition: false,
+          cameras: [camera],
+          settings: previewOnly,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -325,6 +447,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CameraScreen(
+            autoStartRecognition: false,
             cameras: const [camera],
             settings: settings,
             recognizer: local,
@@ -368,6 +491,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CameraScreen(
+            autoStartRecognition: false,
             cameras: const [camera],
             settings: configured,
             apiFactory: (_) => api,
@@ -433,7 +557,11 @@ void main() {
       platform.failInitialization = true;
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(cameras: [camera], settings: previewOnly),
+          home: CameraScreen(
+            autoStartRecognition: false,
+            cameras: [camera],
+            settings: previewOnly,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -455,7 +583,11 @@ void main() {
       platform.initializationGate = gate;
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(cameras: [camera], settings: previewOnly),
+          home: CameraScreen(
+            autoStartRecognition: false,
+            cameras: [camera],
+            settings: previewOnly,
+          ),
         ),
       );
       await tester.pump();

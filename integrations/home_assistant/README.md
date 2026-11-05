@@ -162,7 +162,8 @@ The harness exposes test-only bootstrap/state routes on loopback and is not part
 Use **Configure → Camera and connection → Live view (WebRTC)** to enable the live image,
 select a target frame rate (12/15/24 FPS) and resolution (480p/720p). Settings stay in HA;
 the mounted iPhone retrieves them automatically within about 15 seconds. Keep the iPhone
-camera screen open in the foreground. Recognition remains independent.
+app in the foreground. With a saved pairing it opens the camera and starts local recognition
+automatically; backgrounding or locking pauses capture and returning resumes it.
 
 The new iPhone app uses H.264 over encrypted WebRTC for live video. Existing JPEG-only apps
 keep their previous camera mode until the new app first connects. The camera entity ID and

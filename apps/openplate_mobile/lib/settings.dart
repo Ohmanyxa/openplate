@@ -242,6 +242,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 title: 'BETRIEB & DATENSCHUTZ',
                 children: [
                   const ListTile(
+                    leading: Icon(Icons.play_circle_outline),
+                    title: Text('Automatischer Start'),
+                    subtitle: Text(
+                      'Mit gespeicherter Kopplung starten Kamera und Erkennung beim Öffnen automatisch. '
+                      'Das Livebild folgt der HA-Einstellung. Im Hintergrund oder bei gesperrtem iPhone '
+                      'pausiert die Kamera; beim Zurückkehren läuft sie automatisch weiter.',
+                    ),
+                  ),
+                  const ListTile(
                     leading: Icon(Icons.dark_mode_outlined),
                     title: Text('Schwarzmodus'),
                     subtitle: Text(
