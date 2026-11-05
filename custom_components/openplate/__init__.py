@@ -56,7 +56,6 @@ class OpenPlateManager:
         self.entry = entry
         self.config = {**entry.data, **entry.options}
         self.plates = parse_plates(self.config[CONF_PLATES])
-        # Old garage/action options stay on disk, but are no longer used.
         self.presence = {plate: PlatePresence() for plate in self.plates}
         self.last_event: dict[str, Any] | None = None
         self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
@@ -242,7 +241,6 @@ class OpenPlateManager:
             "plate": plate,
             "registered": registered,
             "display_name": self.plates.get(plate),
-            "garage_entity_id": None,
         }
         self.last_event = data
         self.notify("recognized", data)
@@ -279,7 +277,6 @@ class OpenPlateManager:
                     "display_name": self.plates[plate],
                     "registered": True,
                     "device_id": self.config[CONF_DEVICE_ID],
-                    "garage_entity_id": None,
                 }
                 self.notify("disappeared", data)
                 self.notify("state", data)
@@ -339,9 +336,17 @@ def _remove_obsolete_entities(
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Migrate entries created before the guided pairing flow."""
-    if entry.version < 4:
-        hass.config_entries.async_update_entry(entry, version=4)
+    """Retain pairing/recognition settings and remove retired actuator configuration."""
+    if entry.version > 5:
+        return False
+    if entry.version < 5:
+        retired_keys = {"garages", "plate_garages"}
+        hass.config_entries.async_update_entry(
+            entry,
+            data={key: value for key, value in entry.data.items() if key not in retired_keys},
+            options={key: value for key, value in entry.options.items() if key not in retired_keys},
+            version=5,
+        )
     return True
 
 

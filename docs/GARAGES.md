@@ -38,7 +38,9 @@ schaltet registrierte Kennzeichen nicht ein; jedes hat einen eigenen Zustand.
 ## Steuerung bleibt bei HA
 
 OpenPlate ruft keine Tor-/Schalteraktionen mehr auf. Alte Zuordnungen/Aktionsoptionen
-bleiben gespeichert, werden aber ignoriert; alte Garagen-Sensoren werden entfernt.
+werden beim Upgrade aus den gespeicherten Einstellungen entfernt; alte Garagen-Sensoren werden entfernt.
+Kennzeichenverwaltung, Erkennungsintervall und Anwesenheitsdauer bleiben zentral in der Integration.
+Das montierte iPhone übernimmt Änderungen automatisch; hierfür ist keine Bedienung am Gerät nötig.
 Vorhandene Präsenz-Unique-IDs bleiben erhalten. Beim Löschen eines Kennzeichens werden
 seine Präsenz-/Richtungsentitäten entfernt; bestehende Automationen dann prüfen.
 

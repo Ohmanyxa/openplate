@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from test_garages_motion import TestGarageFlow
+from test_identity_motion import TestOptionsFlow
 
 from custom_components.openplate import OpenPlateManager, _remove_obsolete_entities
 from custom_components.openplate.binary_sensor import OpenPlatePresenceSensor
@@ -81,7 +81,7 @@ class PlateSensorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(movement_status(None), "unknown")
 
     async def test_menu_and_separate_add_edit_delete_fields(self):
-        flow = TestGarageFlow()
+        flow = TestOptionsFlow()
         flow.test_entry = self.entry
         flow.hass = self.hass
         flow.async_show_form = Mock(side_effect=lambda **kw: kw)

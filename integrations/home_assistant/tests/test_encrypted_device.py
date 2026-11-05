@@ -95,7 +95,7 @@ class EncryptedDeviceTests(unittest.IsolatedAsyncioTestCase):
         payload.pop("garage_entity_id")
         self.assertEqual((await self.send(self.envelope(payload))).status, 200)
         self.assertEqual(self.manager.last_event["motion"], motion)
-        self.assertIsNone(self.manager.last_event["garage_entity_id"])
+        self.assertNotIn("garage_entity_id", self.manager.last_event)
         bad = {**payload, "event_id": "bad-motion", "motion": {**motion, "dx": float("inf")}}
         self.assertEqual((await self.send(self.envelope(bad))).status, 400)
 

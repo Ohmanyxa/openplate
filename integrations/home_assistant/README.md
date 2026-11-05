@@ -61,7 +61,10 @@ unknown. Direction describes the most recent processed observation, not a contin
 The integration calls **no cover/switch services**, even if old saved garage options are enabled.
 Garage/action menus and garage movement sensors have been retired. Existing registered plates,
 pairings and presence unique IDs are retained. Deleted plate entities are removed from the registry.
-Old garage settings remain stored but are ignored; move any desired actions into HA automations.
+Upgrades remove retired garage settings and assignments from configuration storage. Sensor/event
+payloads contain no garage target. Configure any desired actions in HA automations.
+Plate management, recognition interval and presence timeout remain centrally configurable in this
+integration; the mounted iPhone retrieves changes automatically without operating the phone.
 
 Missing motion from older apps is unknown. Presence may turn on before the fourth frame needed for
 direction: trigger on the direction sensor transition, not only presence off → on.

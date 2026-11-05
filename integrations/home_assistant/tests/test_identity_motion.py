@@ -7,13 +7,13 @@ from custom_components.openplate.motion import validate_motion
 from custom_components.openplate.plates import normalize_plate, parse_plates
 
 
-class TestGarageFlow(OpenPlateOptionsFlow):
+class TestOptionsFlow(OpenPlateOptionsFlow):
     @property
     def config_entry(self):
         return self.test_entry
 
 
-class GarageMotionTests(unittest.IsolatedAsyncioTestCase):
+class IdentityMotionTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.config = {
             "device_id": "test",
@@ -21,14 +21,14 @@ class GarageMotionTests(unittest.IsolatedAsyncioTestCase):
             "plate_garages": {"BTEST1": "cover.garage", "NOTKNOWN": "cover.other"},
         }
 
-    def test_exact_umlaut_identity_and_server_owned_assignment(self):
+    def test_exact_umlaut_identity_ignores_legacy_door_assignment(self):
         self.assertEqual(normalize_plate("mu\u0308-ab 12"), "MÜAB12")
         self.assertNotEqual(normalize_plate("MÜAB12"), normalize_plate("MUAB12"))
         manager = OpenPlateManager(None, SimpleNamespace(data=self.config, options={}))
         manager.process_observation({"plate": "BTEST1"}, 100)
-        self.assertIsNone(manager.last_event["garage_entity_id"])
+        self.assertNotIn("garage_entity_id", manager.last_event)
         manager.process_observation({"plate": "OTHER"}, 101)
-        self.assertIsNone(manager.last_event["garage_entity_id"])
+        self.assertNotIn("garage_entity_id", manager.last_event)
         self.assertEqual(parse_plates("MÜAB12=One\nMUAB12=Two"), {"MÜAB12": "One", "MUAB12": "Two"})
 
     def test_motion_bounds_and_finite_numbers(self):

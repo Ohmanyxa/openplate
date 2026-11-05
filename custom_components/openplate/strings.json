@@ -30,7 +30,7 @@
     "step": {
       "init": {
         "title": "Manage OpenPlate",
-        "description": "Each plate has presence and direction sensors. Use Home Assistant automations to control doors and switches.",
+        "description": "Manage plates and recognition settings centrally here; the mounted iPhone retrieves changes automatically. OpenPlate provides a camera, sensors and events. Control devices using Home Assistant automations.",
         "menu_options": {
           "plates": "Manage plates",
           "pairing": "Pair an iPhone",
@@ -73,7 +73,7 @@
       },
       "recognition": {
         "title": "On-device iPhone recognition",
-        "description": "Detection and OCR run on the iPhone. Camera frames stay on the device; only confirmed plate strings are sent encrypted to Home Assistant. No recognition server or server API key is required. The app retrieves changes within about 15 seconds.",
+        "description": "Detection and OCR run on the iPhone. Plate observations and optional live images are sent encrypted to Home Assistant. No recognition server or server API key is required. The mounted iPhone retrieves changes within about 15 seconds without interaction on the device.",
         "data": {
           "capture_interval": "Frame processing interval (seconds)"
         },

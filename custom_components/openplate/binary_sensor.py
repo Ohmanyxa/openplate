@@ -12,7 +12,7 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:  # type: i
 
 
 class OpenPlatePresenceSensor(OpenPlateEntity, BinarySensorEntity):
-    _attr_icon = "mdi:garage-variant"
+    _attr_icon = "mdi:car"
 
     def __init__(self, manager, plate: str) -> None:  # type: ignore[no-untyped-def]
         super().__init__(manager)

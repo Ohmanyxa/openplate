@@ -30,7 +30,7 @@
     "step": {
       "init": {
         "title": "OpenPlate verwalten",
-        "description": "Pro Kennzeichen gibt es einen Anwesenheits- und einen Richtungssensor. Tore und Schalter steuerst du mit Home-Assistant-Automationen.",
+        "description": "Kennzeichen und Erkennungseinstellungen verwaltest du hier zentral; das montierte iPhone übernimmt Änderungen automatisch. OpenPlate stellt Kamera, Sensoren und Ereignisse bereit. Geräte steuerst du mit Home-Assistant-Automationen.",
         "menu_options": {
           "plates": "Kennzeichen verwalten",
           "pairing": "iPhone koppeln",
@@ -73,7 +73,7 @@
       },
       "recognition": {
         "title": "Lokale Erkennung auf dem iPhone",
-        "description": "Detection und OCR laufen auf dem iPhone. Kamerabilder bleiben auf dem Gerät; nur bestätigte Kennzeichen werden verschlüsselt an Home Assistant gesendet. Kein Erkennungsserver und kein Server-API-Schlüssel erforderlich. Die App übernimmt Änderungen innerhalb von etwa 15 Sekunden.",
+        "description": "Detection und OCR laufen auf dem iPhone. Kennzeichen und ein optional aktiviertes Livebild werden verschlüsselt an Home Assistant übertragen. Kein Erkennungsserver und kein Server-API-Schlüssel erforderlich. Das montierte iPhone übernimmt Änderungen innerhalb von etwa 15 Sekunden ohne Bedienung am Gerät.",
         "data": {
           "capture_interval": "Frame-Prüfintervall (Sekunden)"
         },

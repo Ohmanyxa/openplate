@@ -109,7 +109,7 @@ widths/heights per second; scale rate is a relative linear expansion rate per se
 velocity. Unknown estimates use null vector/rate values. HA rejects unknown motion fields, non-finite
 or out-of-bounds numbers, and classified estimates with insufficient sample count/time span.
 The metadata is still a client assertion, not a proof of motion or an instruction to control a door.
-No actuator target is accepted from the phone. Legacy `garage_entity_id` metadata is now null;
+No actuator target is accepted from the phone. Legacy `garage_entity_id` metadata is no longer emitted;
 HA exposes per-plate presence/direction sensors and calls no actuator services. No bounding boxes
 or camera frames are transmitted in observation messages. Growing plate size maps to `arrival`, shrinking to `departure`.
 Observation timestamps must be timezone-aware and within 90 seconds of HA time, even inside a

@@ -113,7 +113,7 @@ def _create_pairing_uri(
 class OpenPlateConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Configure one mounted OpenPlate camera."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         self._pending_data: dict[str, Any] | None = None
