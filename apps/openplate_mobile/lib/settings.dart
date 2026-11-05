@@ -21,6 +21,8 @@ class OpenPlateSettings {
     required this.webhookSecret,
     this.registeredPlates = const {},
     this.supportsVehicleVerification = false,
+    this.supportsWebRTC = false,
+    this.liveCamera = const LiveCameraSettings(),
   });
 
   static const _secureStorage = FlutterSecureStorage();
@@ -33,6 +35,8 @@ class OpenPlateSettings {
   final String webhookSecret;
   final Map<String, String> registeredPlates;
   final bool supportsVehicleVerification;
+  final bool supportsWebRTC;
+  final LiveCameraSettings liveCamera;
 
   factory OpenPlateSettings.fromPairing(
     OpenPlatePairingConfiguration configuration,
@@ -45,6 +49,8 @@ class OpenPlateSettings {
     webhookSecret: configuration.webhookSecret,
     registeredPlates: configuration.registeredPlates,
     supportsVehicleVerification: configuration.supportsVehicleVerification,
+    supportsWebRTC: configuration.supportsWebRTC,
+    liveCamera: configuration.liveCamera,
   );
 
   bool get isPaired =>
@@ -89,6 +95,10 @@ class OpenPlateSettings {
             as Map,
       ),
       supportsVehicleVerification: preferences.getBool('vehicle_v1') ?? false,
+      supportsWebRTC: preferences.getBool('camera_webrtc_v1') ?? false,
+      liveCamera: LiveCameraSettings.fromJson(
+        jsonDecode(preferences.getString('live_camera') ?? 'null'),
+      ),
     );
   }
 
@@ -105,6 +115,8 @@ class OpenPlateSettings {
       value: jsonEncode(registeredPlates),
     );
     await preferences.setBool('vehicle_v1', supportsVehicleVerification);
+    await preferences.setBool('camera_webrtc_v1', supportsWebRTC);
+    await preferences.setString('live_camera', jsonEncode(liveCamera.toJson()));
   }
 
   static String _newSecret() {
@@ -211,6 +223,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ],
               ),
+              if (settings.supportsWebRTC)
+                SettingsSection(
+                  title: 'LIVEBILD',
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.videocam_outlined),
+                      title: const Text('H.264 / WebRTC'),
+                      subtitle: Text(
+                        '${settings.liveCamera.enabled ? "In HA aktiviert" : "In HA ausgeschaltet"} · '
+                        '${settings.liveCamera.fps} FPS Ziel · ${settings.liveCamera.resolution}. '
+                        'Ein/Aus, Bildrate und Auflösung unter OpenPlate → Konfigurieren → Kamera und Verbindung → Livebild einstellen.',
+                      ),
+                    ),
+                  ],
+                ),
               SettingsSection(
                 title: 'BETRIEB & DATENSCHUTZ',
                 children: [

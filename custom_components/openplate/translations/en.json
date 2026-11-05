@@ -95,7 +95,8 @@
         "menu_options": {
           "recognition": "On-device recognition",
           "connection": "Home Assistant address",
-          "advanced": "Presence timeout"
+          "advanced": "Presence timeout",
+          "live": "Live view (WebRTC)"
         }
       },
       "plate": {
@@ -108,6 +109,15 @@
         },
         "data_description": {
           "plate": "No spaces, e.g. BAB123 or MÜAB123."
+        }
+      },
+      "live": {
+        "title": "WebRTC live view",
+        "description": "Control the mounted iPhone without interaction on the device. H.264 video with encrypted signaling and DTLS-SRTP media. 24 FPS is a target; Wi-Fi, temperature and device load may reduce frame rate. Keep the app camera open in the foreground. Both components must support WebRTC.",
+        "data": {
+          "live_enabled": "Enable live view",
+          "live_fps": "Target frame rate (12, 15 or 24 FPS)",
+          "live_resolution": "Resolution"
         }
       }
     },

@@ -92,3 +92,14 @@ The input image is decoded once. Each valid high-resolution crop is copied once 
 when the visualization buffer is mutated. The still-image runner has no queue. A camera runner must
 use a bounded latest-frame buffer and explicitly count replaced frames.
 
+
+## Native real-time camera
+
+The updated iOS path has one flutter_webrtc capture source. Native preview and H.264 peer
+senders consume it directly; a native RTCVideoRenderer retains the latest frame for on-demand
+BGRA extraction by local inference. No full-rate raw-frame copying through Dart is required.
+The configured capture target is 12/15/24 FPS. Recognition continues at its own configured interval.
+Encrypted HTTP requests relay bounded SDP/ICE messages via HA, while DTLS-SRTP video travels
+directly to viewers. JPEG requests remain only for five-second thumbnails and older clients.
+HA opts an existing camera into the WebRTC implementation only after the new app connects,
+preserving its identity and pairing. See [real-time camera details](docs/REALTIME_VIDEO.md).

@@ -53,6 +53,10 @@ downloads about 11 MB of hash-verified models; subsequent inference is offline. 
 Core ML acceleration is not enabled. No model runs in HA. Optional live view sends encrypted camera images to paired HA.
 The paired app retrieves settings automatically within about 15 seconds without another scan.
 
+The optional H.264/WebRTC live camera is configured centrally in HA (enable, 12/15/24 FPS
+as a target, 480p/720p). Update both components and use HA's live view; the JPEG thumbnail
+is not the video stream. [Setup and limits](docs/REALTIME_VIDEO.md).
+
 The iPhone **Kamera öffnen** button always offers local preview, even without a recognition server.
 Start frame processing explicitly with **Erkennung starten**. **Schwarzmodus** hides the app surface
 while the camera and any running recognition continue; tap to reveal controls and return to preview.

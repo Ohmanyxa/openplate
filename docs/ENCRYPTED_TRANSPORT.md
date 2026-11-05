@@ -156,3 +156,35 @@ out-of-order image cannot replace a newer image or undo a stop. Only the latest 
 is kept, separate from plate events. It expires after ten seconds without a new image.
 OpenPlate does not persist images. HA serves camera images through its standard camera
 API; browser transport security and camera access control are supplied by HA.
+
+## Native WebRTC signaling capability
+
+`camera_webrtc_v1` advertises support. Authenticated configuration also includes `live_camera`
+with `enabled` (default false), `fps` (12/15/24) and `resolution` (480p/720p). These are centrally
+managed HA options, automatically retrieved by the mounted phone.
+
+The new app posts `camera.signaling` over the existing encrypted device endpoint. It contains
+`schema_version`, `device_id`, fresh server `session_id`, `ack` (integer relay sequence),
+`ready` (boolean capture readiness) and `messages` (at most 64 phone messages). All are inside
+the existing authenticated envelope; plaintext signaling is rejected. One poll may be in flight;
+an empty response waits up to one second for a new offer/candidate/close. Only successful polls
+advertise phone availability, and HA's live-enabled setting is authoritative.
+
+HA replies with `accepted: true` and up to 64 pending relay messages. Every message has a
+strictly increasing `sequence`, a viewer `session_id`, and type `offer`, `candidate` or `close`.
+Offers carry `sdp` (at most 65,536 characters); candidates carry bounded standard ICE fields.
+The app acknowledges relay messages only after applying them. Relay messages are retained
+until acknowledged; the queue is bounded to 256 entries. The app submits unique-ID messages
+of type `answer` (`sdp`), `candidate` (`candidate`) or `error` (`error`, at most 256 characters).
+Phone IDs are deduplicated in a bounded history. Validation occurs before applying the batch.
+
+The server allows at most two viewer sessions and 64 frontend ICE candidates per session.
+A 428 causes the app to refresh its server session, reset the relay cursor and close old peers.
+Phone heartbeat expiry, viewer unsubscribe and HA entry unload close the related sessions.
+When a new app first polls successfully, HA retains the camera's unique ID while switching
+its entity implementation to native WebRTC; existing JPEG-only apps retain their previous mode.
+
+Media does not pass through JSON/AES envelopes: H.264 RTP is encrypted by WebRTC DTLS-SRTP.
+SDP fingerprints travel via the authenticated signaling channel. The phone uses host ICE
+candidates without a built-in public STUN/TURN service; the HA frontend may use HA-configured
+ICE servers. No automatic remote relay service or recording is supplied.

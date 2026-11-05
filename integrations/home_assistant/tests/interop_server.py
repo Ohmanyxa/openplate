@@ -28,9 +28,11 @@ async def main():
         "recognition_api_key": "",
         "capture_interval": 1,
         "transport_version": 2,
+        "live_enabled": True,
     }
     manager = OpenPlateManager(None, SimpleNamespace(data=config, options={}))
     recognized = []
+    rtc_replies = []
     manager.subscribe(lambda kind, data: recognized.append(data) if kind == "recognized" else None)
 
     async def bootstrap(_request):
@@ -54,12 +56,23 @@ async def main():
     async def device(request):
         return await manager.handle_webhook(None, "interop-device", request)
 
+    async def rtc_offer(_request):
+        manager.realtime.offer("interop-viewer", "v=0-interop-offer", rtc_replies.append)
+        return web.json_response({"accepted": True})
+
     async def state(_request):
-        return web.json_response({"recognized": len(recognized), "last_event": manager.last_event})
+        return web.json_response(
+            {
+                "recognized": len(recognized),
+                "last_event": manager.last_event,
+                "rtc_replies": [m.as_dict() for m in rtc_replies],
+            }
+        )
 
     app = web.Application()
     app.router.add_get("/test/bootstrap", bootstrap)
     app.router.add_get("/test/state", state)
+    app.router.add_post("/test/webrtc/offer", rtc_offer)
     app.router.add_post("/api/webhook/openplate_pairing", pair)
     app.router.add_post("/api/webhook/interop-device", device)
     runner = web.AppRunner(app)

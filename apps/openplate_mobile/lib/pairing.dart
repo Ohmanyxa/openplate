@@ -102,6 +102,46 @@ class OpenPlatePairingRequest {
   }
 }
 
+class LiveCameraSettings {
+  const LiveCameraSettings({
+    this.enabled = false,
+    this.fps = 24,
+    this.resolution = '720p',
+  });
+  final bool enabled;
+  final int fps;
+  final String resolution;
+  int get width => resolution == '480p' ? 640 : 1280;
+  int get height => resolution == '480p' ? 480 : 720;
+  factory LiveCameraSettings.fromJson(dynamic json) {
+    if (json == null) return const LiveCameraSettings();
+    if (json is! Map ||
+        json['enabled'] is! bool ||
+        ![12, 15, 24].contains(json['fps']) ||
+        !['480p', '720p'].contains(json['resolution'])) {
+      throw const FormatException('Ungültige Livebild-Einstellungen');
+    }
+    return LiveCameraSettings(
+      enabled: json['enabled'] as bool,
+      fps: json['fps'] as int,
+      resolution: json['resolution'] as String,
+    );
+  }
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'fps': fps,
+    'resolution': resolution,
+  };
+  @override
+  bool operator ==(Object other) =>
+      other is LiveCameraSettings &&
+      enabled == other.enabled &&
+      fps == other.fps &&
+      resolution == other.resolution;
+  @override
+  int get hashCode => Object.hash(enabled, fps, resolution);
+}
+
 class OpenPlatePairingConfiguration {
   const OpenPlatePairingConfiguration({
     required this.deviceId,
@@ -112,6 +152,8 @@ class OpenPlatePairingConfiguration {
     required this.captureIntervalSeconds,
     this.registeredPlates = const {},
     this.supportsVehicleVerification = false,
+    this.supportsWebRTC = false,
+    this.liveCamera = const LiveCameraSettings(),
   });
 
   final String deviceId;
@@ -122,6 +164,8 @@ class OpenPlatePairingConfiguration {
   final int captureIntervalSeconds;
   final Map<String, String> registeredPlates;
   final bool supportsVehicleVerification;
+  final bool supportsWebRTC;
+  final LiveCameraSettings liveCamera;
 
   factory OpenPlatePairingConfiguration.fromJson(Map<String, dynamic> json) {
     final recognitionUrl = Uri.tryParse(
@@ -171,6 +215,10 @@ class OpenPlatePairingConfiguration {
       webhookSecret: secret,
       captureIntervalSeconds: interval,
       registeredPlates: Map<String, String>.from(rawPlates),
+      liveCamera: LiveCameraSettings.fromJson(json['live_camera']),
+      supportsWebRTC:
+          (json['capabilities'] as List?)?.contains('camera_webrtc_v1') ??
+          false,
       supportsVehicleVerification:
           (json['capabilities'] as List?)?.contains('vehicle_v1') ?? false,
     );

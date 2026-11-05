@@ -1,3 +1,6 @@
+import CoreImage
+import WebRTC
+import flutter_webrtc
 import CryptoKit
 import Flutter
 import Foundation
@@ -8,6 +11,8 @@ import onnxruntime_objc
 final class LocalPlateRecognizer: NSObject, FlutterPlugin {
   private let cameraWorker = DispatchQueue(label: "openplate.camera.encode", qos: .utility)
   private let worker = DispatchQueue(label: "openplate.inference", qos: .userInitiated)
+  private let realtimeFrames = OpenPlateRealtimeFrames()
+  private var realtimeTrack: RTCVideoTrack?
   private var environment: ORTEnv?
   private var detector: ORTSession?
   private var reader: ORTSession?
@@ -21,6 +26,28 @@ final class LocalPlateRecognizer: NSObject, FlutterPlugin {
 
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     switch call.method {
+    case "attachRealtimeTrack":
+      guard let args = call.arguments as? [String: Any],
+            let trackId = args["trackId"] as? String,
+            let track = FlutterWebRTCPlugin.sharedSingleton()?.track(forId: trackId, peerConnectionId: nil) as? RTCVideoTrack else {
+        result(FlutterError(code: "missing_track", message: "WebRTC-Kameraspur nicht verfügbar", details: nil))
+        return
+      }
+      realtimeTrack?.remove(realtimeFrames)
+      realtimeFrames.clear()
+      realtimeTrack = track
+      track.add(realtimeFrames)
+      result(nil)
+    case "detachRealtimeTrack":
+      realtimeTrack?.remove(realtimeFrames)
+      realtimeTrack = nil
+      realtimeFrames.clear()
+      result(nil)
+    case "readRealtimeFrame":
+      cameraWorker.async {
+        let snapshot = self.realtimeFrames.snapshot()
+        DispatchQueue.main.async { result(snapshot) }
+      }
     case "encodeCameraFrame":
       guard let args = call.arguments as? [String: Any],
             let bytes = args["bytes"] as? FlutterStandardTypedData,
@@ -557,5 +584,84 @@ struct BgraVideoFrame {
       }
     }
     return (tensor.withUnsafeBytes { Data($0) }, ratio, padX, padY)
+  }
+}
+
+
+/// Retains one native frame. No encoding, file writes or Flutter copies at video frame rate.
+final class OpenPlateRealtimeFrames: NSObject, RTCVideoRenderer {
+  private let lock = NSLock()
+  private var latest: RTCVideoFrame?
+  private var receivedAt = 0.0
+  private let context = CIContext(options: [.cacheIntermediates: false])
+
+  func setSize(_ size: CGSize) {}
+  func renderFrame(_ frame: RTCVideoFrame?) {
+    lock.lock()
+    latest = frame
+    receivedAt = ProcessInfo.processInfo.systemUptime
+    lock.unlock()
+  }
+  func clear() {
+    lock.lock()
+    latest = nil
+    lock.unlock()
+  }
+  private func sourceImage(_ buffer: RTCVideoFrameBuffer) -> CIImage? {
+    if let cv = buffer as? RTCCVPixelBuffer,
+       cv.cropX == 0, cv.cropY == 0,
+       Int(cv.cropWidth) == CVPixelBufferGetWidth(cv.pixelBuffer),
+       Int(cv.cropHeight) == CVPixelBufferGetHeight(cv.pixelBuffer),
+       Int(cv.width) == CVPixelBufferGetWidth(cv.pixelBuffer),
+       Int(cv.height) == CVPixelBufferGetHeight(cv.pixelBuffer) {
+      return CIImage(cvPixelBuffer: cv.pixelBuffer)
+    }
+    // Adapted/cropped frames may be delivered as I420. Convert with the SDK's
+    // libyuv helper only when a local inference/thumbnail snapshot is requested.
+    let yuv = buffer.toI420()
+    let width = Int(yuv.width), height = Int(yuv.height)
+    guard width > 0, height > 0, width <= 4096, height <= 4096 else { return nil }
+    let stride = width * 4
+    var pixels = Data(count: stride * height)
+    let status = pixels.withUnsafeMutableBytes { storage -> Int32 in
+      RTCYUVHelper.i420(toARGB: yuv.dataY, srcStrideY: yuv.strideY,
+        srcU: yuv.dataU, srcStrideU: yuv.strideU, srcV: yuv.dataV, srcStrideV: yuv.strideV,
+        dstARGB: storage.baseAddress!.assumingMemoryBound(to: UInt8.self),
+        dstStrideARGB: Int32(stride), width: yuv.width, height: yuv.height)
+    }
+    guard status == 0 else { return nil }
+    // libyuv ARGB is stored in BGRA byte order on little-endian iOS.
+    return CIImage(bitmapData: pixels, bytesPerRow: stride,
+      size: CGSize(width: width, height: height), format: .BGRA8,
+      colorSpace: CGColorSpaceCreateDeviceRGB())
+  }
+  func snapshot() -> [String: Any]? {
+    lock.lock()
+    let frame = latest
+    let age = ProcessInfo.processInfo.systemUptime - receivedAt
+    lock.unlock()
+    guard age < 1, let frame, let source = sourceImage(frame.buffer) else { return nil }
+    let orientation: Int32
+    switch frame.rotation {
+    case ._90: orientation = 6
+    case ._180: orientation = 3
+    case ._270: orientation = 8
+    default: orientation = 1
+    }
+    let image = source.oriented(forExifOrientation: orientation)
+    guard let cgImage = context.createCGImage(image, from: image.extent) else { return nil }
+    let width = cgImage.width, height = cgImage.height, stride = cgImage.width * 4
+    var bytes = Data(count: stride * height)
+    let rendered = bytes.withUnsafeMutableBytes { storage -> Bool in
+      guard let cg = CGContext(data: storage.baseAddress, width: width, height: height,
+        bitsPerComponent: 8, bytesPerRow: stride, space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue)
+        else { return false }
+      cg.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+      return true
+    }
+    guard rendered else { return nil }
+    return ["width": width, "height": height, "bytesPerRow": stride,
+      "bytes": FlutterStandardTypedData(bytes: bytes)]
   }
 }

@@ -10,6 +10,9 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'openplate_api.dart';
 import 'settings.dart';
 import 'video_frame.dart';
+import 'realtime_camera.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart'
+    show RTCVideoView, RTCVideoViewObjectFit;
 import 'local_recognition.dart';
 import 'plate_identity.dart';
 import 'plate_motion.dart';
@@ -39,6 +42,63 @@ class CameraScreen extends StatefulWidget {
 class _CameraScreenState extends State<CameraScreen>
     with WidgetsBindingObserver {
   CameraController? _controller;
+  RealtimeCamera? _realtime;
+  Timer? _realtimeTimer;
+  bool _readingRealtimeFrame = false;
+  bool get _cameraReady =>
+      (_realtime?.ready ?? false) ||
+      (_controller?.value.isInitialized ?? false);
+
+  Future<void> _onRealtimeFrame() async {
+    final camera = _realtime;
+    if (!mounted ||
+        !_foreground ||
+        camera == null ||
+        !camera.ready ||
+        _readingRealtimeFrame) {
+      return;
+    }
+    final now = _videoClock.elapsed;
+    final recognize =
+        _recognizing &&
+        !_busy &&
+        (_lastFrame == null ||
+            now - _lastFrame! >=
+                Duration(seconds: _settings.captureIntervalSeconds));
+    final thumbnail =
+        _streaming &&
+        !_sendingFrame &&
+        !_stoppingStream &&
+        (_lastStreamFrame == null ||
+            now - _lastStreamFrame! >= const Duration(seconds: 5));
+    if (!recognize && !thumbnail) return;
+    _readingRealtimeFrame = true;
+    final generation = _generation;
+    try {
+      final frame = await camera.readFrame();
+      if (!mounted ||
+          !_foreground ||
+          generation != _generation ||
+          frame == null) {
+        return;
+      }
+      if (recognize) {
+        _lastFrame = now;
+        unawaited(_processFrame(frame));
+      }
+      if (thumbnail) {
+        _lastStreamFrame = now;
+        unawaited(_sendLiveFrame(frame, generation));
+      }
+    } on Object {
+      if (mounted && generation == _generation) {
+        setState(() => _cameraStatus = 'Kamerabild noch nicht verfügbar');
+      }
+    } finally {
+      _readingRealtimeFrame = false;
+    }
+  }
+
   Future<void> _cameraTask = Future.value();
   int _generation = 0;
   int _processingEpoch = 0;
@@ -72,8 +132,9 @@ class _CameraScreenState extends State<CameraScreen>
             'width': frame.width,
             'height': frame.height,
             'bytesPerRow': frame.strides.single,
-            'orientation':
-                _controller?.value.deviceOrientation.name ?? 'portraitUp',
+            'orientation': _realtime != null
+                ? 'landscapeLeft'
+                : (_controller?.value.deviceOrientation.name ?? 'portraitUp'),
           });
       if (!mounted ||
           !_streaming ||
@@ -83,13 +144,13 @@ class _CameraScreenState extends State<CameraScreen>
         return;
       }
       await api.sendCameraFrame(jpeg, capturedAt);
-      if (mounted && _streaming) {
+      if (mounted && _streaming && _realtime == null) {
         setState(
           () => _streamStatus = 'Livebild verschlüsselt an Home Assistant',
         );
       }
     } on Object {
-      if (mounted && _streaming) {
+      if (mounted && _streaming && _realtime == null) {
         setState(
           () => _streamStatus =
               'Livebild unterbrochen · Verbindung wird erneut versucht',
@@ -310,6 +371,9 @@ class _CameraScreenState extends State<CameraScreen>
     _lastFrame = null;
     _cameraTask = _cameraTask.then((_) async {
       final previous = _controller;
+      final previousRealtime = _realtime;
+      _realtime = null;
+      _realtimeTimer?.cancel();
       _controller = null;
       if (mounted) setState(() {});
       try {
@@ -319,6 +383,7 @@ class _CameraScreenState extends State<CameraScreen>
           }
         } finally {
           await previous?.dispose();
+          await previousRealtime?.dispose();
         }
         if (!open || !mounted || generation != _generation) return;
         if (widget.cameras.isEmpty) {
@@ -332,6 +397,31 @@ class _CameraScreenState extends State<CameraScreen>
           _cameraError = false;
           _cameraStatus = 'Kamera wird gestartet';
         });
+        if (Platform.isIOS && _settings.supportsWebRTC) {
+          final realtime = RealtimeCamera(
+            _settings,
+            onStatus: (status) {
+              if (mounted && generation == _generation) {
+                setState(() => _streamStatus = status);
+              }
+            },
+          );
+          await realtime.start();
+          if (!mounted || generation != _generation || !_foreground) {
+            await realtime.dispose();
+            return;
+          }
+          setState(() {
+            _realtime = realtime;
+            _streaming = _settings.liveCamera.enabled;
+            _cameraStatus = 'Kamera aktiv · gemeinsame WebRTC-Aufnahme';
+          });
+          _realtimeTimer = Timer.periodic(
+            const Duration(milliseconds: 100),
+            (_) => unawaited(_onRealtimeFrame()),
+          );
+          return;
+        }
         final backs = widget.cameras.where(
           (camera) => camera.lensDirection == CameraLensDirection.back,
         );
@@ -378,7 +468,11 @@ class _CameraScreenState extends State<CameraScreen>
     try {
       final updated = await _api.refreshConfiguration();
       if (!mounted) return;
+      final cameraChanged =
+          updated.supportsWebRTC != _settings.supportsWebRTC ||
+          updated.liveCamera != _settings.liveCamera;
       final changed =
+          cameraChanged ||
           updated.recognitionUrl != _settings.recognitionUrl ||
           updated.apiKey != _settings.apiKey ||
           updated.captureIntervalSeconds != _settings.captureIntervalSeconds ||
@@ -398,6 +492,7 @@ class _CameraScreenState extends State<CameraScreen>
           _recognitionStatus = 'Erkennung ausgeschaltet';
         }
         _resetFrameAdmission();
+        if (cameraChanged) _queueCamera(_foreground);
       }
       await _configureVehicles();
       setState(() => _haStatus = 'Home Assistant verbunden');
@@ -452,7 +547,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _toggleRecognition() async {
-    if (!_settings.isComplete || _controller == null || _startingRecognition) {
+    if (!_settings.isComplete || !_cameraReady || _startingRecognition) {
       return;
     }
     if (!_recognizing && !_modelsReady) {
@@ -479,7 +574,7 @@ class _CameraScreenState extends State<CameraScreen>
       }
       if (!mounted) return;
       _startingRecognition = false;
-      if (!_foreground || _controller == null) {
+      if (!_foreground || !_cameraReady) {
         setState(
           () =>
               _recognitionStatus = 'Lokale Modelle bereit · Erkennung starten',
@@ -497,12 +592,7 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _processFrame(VideoFrame frame) async {
-    final controller = _controller;
-    if (_busy ||
-        !_recognizing ||
-        !_foreground ||
-        controller == null ||
-        !controller.value.isInitialized) {
+    if (_busy || !_recognizing || !_foreground || !_cameraReady) {
       return;
     }
     _busy = true;
@@ -683,6 +773,7 @@ class _CameraScreenState extends State<CameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _configurationTimer?.cancel();
+    _realtimeTimer?.cancel();
     _hideControlsTimer?.cancel();
     _foreground = false;
     _streaming = false;
@@ -710,6 +801,11 @@ class _CameraScreenState extends State<CameraScreen>
                   controller != null &&
                   controller.value.isInitialized)
                 Center(child: CameraPreview(controller)),
+              if (!_blackMode && _realtime?.ready == true)
+                RTCVideoView(
+                  _realtime!.renderer,
+                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                ),
               if (_blackMode)
                 const ColoredBox(
                   key: Key('all-black-screen'),
@@ -860,7 +956,7 @@ class _CameraScreenState extends State<CameraScreen>
                         FilledButton.icon(
                           onPressed:
                               _settings.isComplete &&
-                                  controller != null &&
+                                  _cameraReady &&
                                   !_startingRecognition
                               ? _toggleRecognition
                               : null,
@@ -875,14 +971,19 @@ class _CameraScreenState extends State<CameraScreen>
                         ),
                         const SizedBox(height: 8),
                         FilledButton.tonalIcon(
-                          onPressed: _settings.isPaired && controller != null
+                          onPressed:
+                              !_settings.supportsWebRTC &&
+                                  _settings.isPaired &&
+                                  _cameraReady
                               ? _toggleLiveImage
                               : null,
                           icon: Icon(
                             _streaming ? Icons.videocam_off : Icons.videocam,
                           ),
                           label: Text(
-                            _streaming
+                            _settings.supportsWebRTC
+                                ? 'Livebild in Home Assistant einstellen'
+                                : _streaming
                                 ? 'HA-Livebild stoppen'
                                 : 'HA-Livebild starten',
                           ),

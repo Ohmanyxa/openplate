@@ -26,6 +26,9 @@ from .const import (
     CONF_CAPTURE_INTERVAL,
     CONF_DEVICE_ID,
     CONF_HOME_ASSISTANT_URL,
+    CONF_LIVE_ENABLED,
+    CONF_LIVE_FPS,
+    CONF_LIVE_RESOLUTION,
     CONF_PLATES,
     CONF_RECOGNITION_API_KEY,
     CONF_RECOGNITION_URL,
@@ -34,6 +37,8 @@ from .const import (
     CONF_WEBHOOK_ID,
     DEFAULT_ABSENCE_TIMEOUT,
     DEFAULT_CAPTURE_INTERVAL,
+    DEFAULT_LIVE_FPS,
+    DEFAULT_LIVE_RESOLUTION,
     DOMAIN,
     PAIRING_CODE_LIFETIME_SECONDS,
     PAIRING_WEBHOOK_ID,
@@ -194,7 +199,7 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
 
     async def async_step_settings(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         return self.async_show_menu(
-            step_id="settings", menu_options=["recognition", "connection", "advanced"]
+            step_id="settings", menu_options=["recognition", "live", "connection", "advanced"]
         )
 
     async def async_step_plates(self, user_input: dict[str, Any] | None = None) -> FlowResult:
@@ -316,6 +321,25 @@ class OpenPlateOptionsFlow(config_entries.OptionsFlow):
             data_schema=_setup_schema(user_input or self._current),
             errors=errors,
         )
+
+    async def async_step_live(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_LIVE_ENABLED, default=self._current.get(CONF_LIVE_ENABLED, False)
+                ): bool,
+                vol.Required(
+                    CONF_LIVE_FPS, default=self._current.get(CONF_LIVE_FPS, DEFAULT_LIVE_FPS)
+                ): vol.All(vol.Coerce(int), vol.In([12, 15, 24])),
+                vol.Required(
+                    CONF_LIVE_RESOLUTION,
+                    default=self._current.get(CONF_LIVE_RESOLUTION, DEFAULT_LIVE_RESOLUTION),
+                ): SelectSelector(SelectSelectorConfig(options=["480p", "720p"])),
+            }
+        )
+        if user_input is not None:
+            return self.async_create_entry(title="", data=self._updated_options(schema(user_input)))
+        return self.async_show_form(step_id="live", data_schema=schema)
 
     async def async_step_recognition(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         if user_input is not None:

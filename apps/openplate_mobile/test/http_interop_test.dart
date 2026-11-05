@@ -46,7 +46,35 @@ void main() {
       expect(settings.registeredPlates, {'BTEST1': 'Test'});
       expect(settings.supportsVehicleVerification, isTrue);
       final api = OpenPlateApi(settings, client: client);
-      await api.refreshConfiguration();
+      final refreshed = await api.refreshConfiguration();
+      expect(refreshed.supportsWebRTC, isTrue);
+      expect(refreshed.liveCamera.fps, 24);
+      expect(refreshed.liveCamera.enabled, isTrue);
+      await api.pollCameraSignaling(ack: 0, ready: true, messages: []);
+      expect(
+        (await client.post(Uri.parse('$base/test/webrtc/offer'))).statusCode,
+        200,
+      );
+      final negotiation = await api.pollCameraSignaling(
+        ack: 0,
+        ready: true,
+        messages: [],
+      );
+      final offer = (negotiation['messages'] as List).single as Map;
+      expect(offer['sdp'], 'v=0-interop-offer');
+      await api.pollCameraSignaling(
+        ack: offer['sequence'] as int,
+        ready: true,
+        messages: [
+          {
+            'id': 'interop-answer',
+            'session_id': offer['session_id'],
+            'type': 'answer',
+            'sdp': 'v=0-interop-answer',
+          },
+        ],
+      );
+
       final event = PendingPlateEvent.fromPlate(
         const ConfirmedPlate(
           plate: 'BTEST1',
@@ -83,6 +111,10 @@ void main() {
       final state = jsonDecode(
         (await client.get(Uri.parse('$base/test/state'))).body,
       );
+      expect(
+        (state['rtc_replies'] as List).last['answer'],
+        'v=0-interop-answer',
+      );
       expect(state['recognized'], (before['recognized'] as int) + 1);
       expect(state['last_event']['plate'], 'BTEST1');
       expect(state['last_event']['motion']['direction'], 'approaching');
@@ -98,7 +130,12 @@ void main() {
         isFalse,
       );
       for (final body in client.bodies) {
-        for (final secret in [pairing.key, settings.webhookSecret, 'BTEST1']) {
+        for (final secret in [
+          pairing.key,
+          settings.webhookSecret,
+          'BTEST1',
+          'v=0-interop-answer',
+        ]) {
           expect(body.contains(secret), isFalse);
         }
       }

@@ -95,7 +95,8 @@
         "menu_options": {
           "recognition": "Lokale Erkennung",
           "connection": "Home-Assistant-Adresse",
-          "advanced": "Anwesenheitsdauer"
+          "advanced": "Anwesenheitsdauer",
+          "live": "Livebild (WebRTC)"
         }
       },
       "plate": {
@@ -108,6 +109,15 @@
         },
         "data_description": {
           "plate": "Ohne Leerzeichen, z. B. BAB123 oder MÜAB123."
+        }
+      },
+      "live": {
+        "title": "Livebild über WebRTC",
+        "description": "Steuert das montierte iPhone ohne Bedienung am Gerät. H.264-Videostream mit verschlüsseltem Verbindungsaufbau und DTLS-SRTP. 24 FPS ist ein Zielwert; WLAN, Temperatur und Geräteauslastung können die Bildrate reduzieren. Die App muss mit geöffneter Kamera im Vordergrund bleiben. Beide Komponenten müssen WebRTC unterstützen.",
+        "data": {
+          "live_enabled": "Livebild aktivieren",
+          "live_fps": "Ziel-Bildrate (12, 15 oder 24 FPS)",
+          "live_resolution": "Auflösung"
         }
       }
     },

@@ -148,11 +148,13 @@ string `5AU5341`; it is not a German-plate accuracy or physical-iPhone performan
 
 ## Optional encrypted Home Assistant live image
 
-On the camera screen, tap **HA-Livebild starten**. With the updated HA integration,
-the paired device exposes **Live camera**. Recognition is independent of this control.
-Live view is off whenever the camera screen is opened anew. **HA-Livebild stoppen**
-clears the last image in HA; network failure expires it after ten seconds.
-The app sends at most two JPEG images per second, with a maximum edge of 640 pixels,
-through the existing encrypted QR pairing channel. It does not record video or expose
-an RTSP server. Black mode continues streaming; backgrounding pauses it and foregrounding
-resumes it. Keep the app open for continuous camera operation.
+Live view is centrally controlled in HA under **OpenPlate → Configure → Camera and connection
+→ Live view (WebRTC)**: enable/disable, target 12/15/24 FPS, 480p/720p. Keep the app's camera
+screen open in the foreground; black mode continues capture. Recognition remains independent.
+The new app uses a single native WebRTC capture source for preview, H.264 streaming and local
+inference. No per-frame PNG files or second camera session are used.
+
+Upgrade both components. The existing pairing and camera ID remain; the integration upgrades
+the camera from JPEG to WebRTC after the new app connects. Use HA's live camera view rather
+than the five-second JPEG thumbnail. The device must be reachable directly from the viewer;
+OpenPlate supplies no TURN relay. [Full setup and limits](../../docs/REALTIME_VIDEO.md).

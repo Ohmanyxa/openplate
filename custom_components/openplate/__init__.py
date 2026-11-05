@@ -23,7 +23,9 @@ from .camera_buffer import CameraBuffer
 from .configuration import mobile_configuration
 from .const import (
     CONF_ABSENCE_TIMEOUT,
+    CONF_CAMERA_TRANSPORT,
     CONF_DEVICE_ID,
+    CONF_LIVE_ENABLED,
     CONF_PLATES,
     CONF_SECRET,
     CONF_TRANSPORT_VERSION,
@@ -62,6 +64,10 @@ class OpenPlateManager:
         self._nonces: dict[str, float] = {}
         self._session_id = secrets.token_urlsafe(24)
         self.camera = CameraBuffer()
+        # Imported lazily so pairing/plate-only tools do not need camera dependencies.
+        from .realtime import RealtimeRelay
+
+        self.realtime = RealtimeRelay()
         self._event_ids: dict[str, float] = {}
 
     def subscribe(self, listener: Callable[[str, dict[str, Any]], None]) -> Callable[[], None]:
@@ -86,7 +92,7 @@ class OpenPlateManager:
         except (ValueError, UnicodeError):
             return web.json_response({"error": "invalid payload"}, status=400)
         if isinstance(envelope, dict) and envelope.get("version") == 2:
-            return self._handle_encrypted(envelope)
+            return await self._handle_encrypted(envelope)
         if len(body) > MAX_BODY_BYTES:
             return web.json_response({"error": "payload too large"}, status=413)
         # Legacy plaintext is accepted only for existing HTTPS configurations.
@@ -131,7 +137,7 @@ class OpenPlateManager:
         self.process_observation(payload, now)
         return web.json_response({"accepted": True})
 
-    def _handle_encrypted(self, envelope: dict[str, Any]) -> web.Response:
+    async def _handle_encrypted(self, envelope: dict[str, Any]) -> web.Response:
         webhook_id = self.config[CONF_WEBHOOK_ID]
         secret = self.config[CONF_SECRET]
         now = time.time()
@@ -169,6 +175,23 @@ class OpenPlateManager:
         # Fresh server sessions make recorded plate messages unusable after a reload/restart.
         if payload.get("session_id") != self._session_id:
             return respond({"error": "session required"}, 428)
+        if payload.get("event_type") == "camera.signaling":
+            try:
+                result = await self.realtime.poll(
+                    payload, self.config.get(CONF_LIVE_ENABLED, False)
+                )
+            except (ValueError, TypeError, KeyError):
+                return respond({"error": "invalid camera signaling"}, 400)
+            if self.hass is not None and self.config.get(CONF_CAMERA_TRANSPORT) != "webrtc":
+                # Switch the existing camera entity to native WebRTC only after an
+                # authenticated new app connects. Preserve its unique ID and pairing.
+                self.hass.config_entries.async_update_entry(
+                    self.entry,
+                    options={**self.entry.options, CONF_CAMERA_TRANSPORT: "webrtc"},
+                )
+                self.config[CONF_CAMERA_TRANSPORT] = "webrtc"
+            self.notify("camera", {})
+            return respond(result)
         if payload.get("event_type") in {"camera.frame", "camera.stopped"}:
             try:
                 self.camera.update(payload, now)
@@ -263,6 +286,7 @@ class OpenPlateManager:
     @callback
     def check_departures(self, _now: datetime) -> None:
         current = time.time()
+        self.realtime.expire()
         if self.camera.expire(current):
             self.notify("camera", {})
         timeout = int(self.config[CONF_ABSENCE_TIMEOUT])
@@ -351,6 +375,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    hass.data[DOMAIN][entry.entry_id].realtime.close_all()
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
         webhook.async_unregister(hass, entry.data[CONF_WEBHOOK_ID])

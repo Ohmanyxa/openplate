@@ -87,6 +87,41 @@ void main() {
     expect(configuration.captureIntervalSeconds, 2);
   });
 
+  test(
+    'live camera configuration is negotiated and validates bounded FPS and resolution',
+    () {
+      final legacy = OpenPlatePairingConfiguration.fromJson({
+        'schema_version': 1,
+        'device_id': 'phone',
+        'home_assistant_webhook_url': 'http://ha.local/api/webhook/test',
+        'webhook_secret': 's' * 32,
+        'capture_interval_seconds': 1,
+      });
+      expect(legacy.supportsWebRTC, isFalse);
+      expect(legacy.liveCamera.enabled, isFalse);
+      for (final fps in [12, 15, 24]) {
+        final live = LiveCameraSettings.fromJson({
+          'enabled': true,
+          'fps': fps,
+          'resolution': '720p',
+        });
+        expect(live.fps, fps);
+        expect(live.width, 1280);
+        expect(live.height, 720);
+      }
+      for (final invalid in [
+        {'enabled': true, 'fps': 120, 'resolution': '720p'},
+        {'enabled': true, 'fps': 24, 'resolution': '4k'},
+        {'enabled': 'true', 'fps': 24, 'resolution': '720p'},
+      ]) {
+        expect(
+          () => LiveCameraSettings.fromJson(invalid),
+          throwsFormatException,
+        );
+      }
+    },
+  );
+
   test('rejects expired pairing codes', () {
     expect(
       () => OpenPlatePairingRequest.parse(

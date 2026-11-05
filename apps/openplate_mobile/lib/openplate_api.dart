@@ -159,6 +159,31 @@ class OpenPlateApi {
     }
   }
 
+  Future<Map<String, dynamic>> pollCameraSignaling({
+    required int ack,
+    required bool ready,
+    required List<Map<String, dynamic>> messages,
+  }) async {
+    if (_sessionId == null) await refreshConfiguration();
+    final response = await _encryptedPost({
+      'schema_version': 1,
+      'event_type': 'camera.signaling',
+      'device_id': settings.deviceId,
+      'session_id': _sessionId,
+      'ack': ack,
+      'ready': ready,
+      'messages': messages,
+    });
+    if (response.statusCode == 428) {
+      await refreshConfiguration();
+      throw const CameraSessionChanged();
+    }
+    if (response.statusCode != 200) {
+      throw HttpException('Home Assistant WebRTC: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<http.Response> _encryptedPost(Map<String, dynamic> body) async {
     final uri = Uri.parse(settings.homeAssistantWebhookUrl);
     if (!isHomeAssistantUrl(uri)) {
@@ -192,4 +217,8 @@ class OpenPlateApi {
       if (_client == null) client.close();
     }
   }
+}
+
+class CameraSessionChanged implements Exception {
+  const CameraSessionChanged();
 }

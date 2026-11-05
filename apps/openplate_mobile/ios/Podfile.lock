@@ -5,6 +5,9 @@ PODS:
   - flutter_secure_storage_darwin (10.0.0):
     - Flutter
     - FlutterMacOS
+  - flutter_webrtc (1.6.3):
+    - Flutter
+    - WebRTC-SDK (= 150.7871.04)
   - mobile_scanner (7.0.0):
     - Flutter
     - FlutterMacOS
@@ -20,11 +23,13 @@ PODS:
     - FlutterMacOS
   - wakelock_plus (0.0.1):
     - Flutter
+  - WebRTC-SDK (150.7871.04)
 
 DEPENDENCIES:
   - camera_avfoundation (from `.symlinks/plugins/camera_avfoundation/darwin`)
   - Flutter (from `Flutter`)
   - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
+  - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
   - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - onnxruntime-objc (= 1.30.0)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
@@ -35,6 +40,7 @@ SPEC REPOS:
   trunk:
     - onnxruntime-c
     - onnxruntime-objc
+    - WebRTC-SDK
 
 EXTERNAL SOURCES:
   camera_avfoundation:
@@ -43,6 +49,8 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_secure_storage_darwin:
     :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
+  flutter_webrtc:
+    :path: ".symlinks/plugins/flutter_webrtc/ios"
   mobile_scanner:
     :path: ".symlinks/plugins/mobile_scanner/darwin"
   package_info_plus:
@@ -56,12 +64,14 @@ SPEC CHECKSUMS:
   camera_avfoundation: 968a9a5323c79a99c166ad9d7866bfd2047b5a9b
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_secure_storage_darwin: 46e401699982ee74142909676535e0f6a7321e58
+  flutter_webrtc: 7948417965923736a584f9a1c5eeccaccf3372cf
   mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
   onnxruntime-c: 36ca0f2cdbc89c6b330ec5287c3faf5ca6ed394d
   onnxruntime-objc: b5edf18cf57daebe2ee59a7866aab12c8eeff940
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
   wakelock_plus: e29112ab3ef0b318e58cfa5c32326458be66b556
+  WebRTC-SDK: 71bce2be85c3082d24bbfd1a9930ea07d0c494c1
 
 PODFILE CHECKSUM: f99915e4aaf0bbbf622824c6d5a6fac6a02e292c
 

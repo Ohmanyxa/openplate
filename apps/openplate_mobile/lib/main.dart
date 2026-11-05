@@ -13,6 +13,8 @@ import 'app_ui.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks(['WebRTC SDK'],
+      await rootBundle.loadString('assets/licenses/WebRTC-LICENSE'));
     yield LicenseEntryWithLineBreaks(
       ['Intel Open Model Zoo vehicles'],
       'Copyright (c) Intel Corporation.\n\n${await rootBundle.loadString('assets/licenses/Intel-OpenModelZoo-LICENSE')}',
@@ -90,7 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final updated = await OpenPlateApi(settings).refreshConfiguration();
       if (!mounted || !identical(settings, _settings)) return;
-      if (updated.recognitionUrl != settings.recognitionUrl ||
+      if (updated.supportsWebRTC != settings.supportsWebRTC ||
+          updated.liveCamera != settings.liveCamera ||
+          updated.recognitionUrl != settings.recognitionUrl ||
           updated.apiKey != settings.apiKey ||
           updated.captureIntervalSeconds != settings.captureIntervalSeconds ||
           !mapEquals(updated.registeredPlates, settings.registeredPlates) ||

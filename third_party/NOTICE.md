@@ -37,3 +37,15 @@ and raw SSD heads exposed; OpenPlate implements decode/NMS. ReID weights are unm
 The app includes `Intel-OpenModelZoo-LICENSE` and `Vehicle-ReID-LICENSE` in its assets
 and license screen. See [vehicle verification](../docs/VEHICLE_VERIFICATION.md) for
 checks and limitations. These models do not provide an anti-spoofing/liveness guarantee.
+
+## Realtime video
+
+The iOS app uses `flutter_webrtc` 1.6.3 (MIT) and its CocoaPods dependency
+`WebRTC-SDK` 150.7871.04. The WebRTC framework's distributed license/third-party
+notices are bundled unchanged as `assets/licenses/WebRTC-LICENSE` and displayed
+in the app license screen. WebRTC's native iOS H.264 encoder supports VideoToolbox;
+actual codec implementation, frame rate, power consumption and thermal behavior
+must be checked on the target iPhone.
+
+- Plugin: https://github.com/flutter-webrtc/flutter-webrtc
+- Framework distribution: https://github.com/webrtc-sdk/Specs/releases/tag/150.7871.04

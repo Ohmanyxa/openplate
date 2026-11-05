@@ -82,7 +82,7 @@ class SensorMigrationTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(
             (await flow.async_step_settings())["menu_options"],
-            ["recognition", "connection", "advanced"],
+            ["recognition", "live", "connection", "advanced"],
         )
         recognition = await flow.async_step_recognition({"capture_interval": 1})
         self.assertEqual(recognition["data"]["capture_interval"], 1)

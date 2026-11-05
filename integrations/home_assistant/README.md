@@ -145,6 +145,7 @@ For a real Dart/Python HTTP round trip, run the localhost-only test harness in o
 
 ```bash
 PYTHONPATH=. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+  --with 'numpy>=2.3.2' --with 'PyTurboJPEG==1.8.3' \
   python integrations/home_assistant/tests/interop_server.py
 ```
 
@@ -158,20 +159,15 @@ The harness exposes test-only bootstrap/state routes on loopback and is not part
 
 ## Optional iPhone live camera
 
-Update both the integration and the iPhone app, restart HA, and open the camera screen.
-Tap **HA-Livebild starten** to send an encrypted live image to paired Home Assistant.
-The integration creates a **Live camera** entity on the paired device; add it to a camera
-card and open its live view. Recognition can be started or stopped independently.
-No extra stream URL, credentials or certificate setup is required.
+Use **Configure → Camera and connection → Live view (WebRTC)** to enable the live image,
+select a target frame rate (12/15/24 FPS) and resolution (480p/720p). Settings stay in HA;
+the mounted iPhone retrieves them automatically within about 15 seconds. Keep the iPhone
+camera screen open in the foreground. Recognition remains independent.
 
-This is JPEG live view (up to 2 frames/second, maximum edge 640 pixels), not RTSP,
-H.264 video or a recording service. The phone uses its existing capture session and
-AES-256-GCM pairing channel. Only the latest image is held in HA memory; no images
-are saved by OpenPlate. HA users and integrations with camera access can view it.
-The HA-to-browser connection uses HA's own transport: use HTTPS for remote viewing.
+The new iPhone app uses H.264 over encrypted WebRTC for live video. Existing JPEG-only apps
+keep their previous camera mode until the new app first connects. The camera entity ID and
+pairing are retained. Both components need the new code for WebRTC. A dashboard card must
+use `camera_view: live`; its JPEG thumbnail is only refreshed about every five seconds.
 
-**HA-Livebild stoppen** clears the live image. On disconnect the camera becomes
-unavailable after ten seconds; expiration cleanup runs every five seconds. Leaving
-the app or closing its camera pauses transmission. Returning from the background
-resumes live view if it was enabled; opening the camera screen anew starts with it off.
-Black mode keeps an enabled live view running. The iPhone must remain in the foreground.
+24 FPS is a target, not a measured guarantee. No recording or RTSP server is provided.
+[Setup, encryption, network requirements and validation](../../docs/REALTIME_VIDEO.md).

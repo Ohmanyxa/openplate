@@ -1,10 +1,71 @@
 import Flutter
 import UIKit
+import WebRTC
 import XCTest
 import onnxruntime_objc
 @testable import Runner
 
 class RunnerTests: XCTestCase {
+
+  func testRealtimeFramesUseLatestBufferAndHonorRotation() throws {
+    var pixelBuffer: CVPixelBuffer?
+    XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault, 4, 2,
+      kCVPixelFormatType_32BGRA, [kCVPixelBufferCGImageCompatibilityKey: true,
+        kCVPixelBufferCGBitmapContextCompatibilityKey: true] as CFDictionary, &pixelBuffer), kCVReturnSuccess)
+    let buffer = try XCTUnwrap(pixelBuffer)
+    CVPixelBufferLockBaseAddress(buffer, [])
+    let pointer = try XCTUnwrap(CVPixelBufferGetBaseAddress(buffer)).assumingMemoryBound(to: UInt8.self)
+    for row in 0..<2 {
+      for column in 0..<4 {
+        let index = row * CVPixelBufferGetBytesPerRow(buffer) + column * 4
+        pointer[index] = 0; pointer[index + 1] = 0; pointer[index + 2] = 255; pointer[index + 3] = 255
+      }
+    }
+    CVPixelBufferUnlockBaseAddress(buffer, [])
+    let frames = OpenPlateRealtimeFrames()
+    XCTAssertNil(frames.snapshot())
+    frames.renderFrame(RTCVideoFrame(buffer: RTCCVPixelBuffer(pixelBuffer: buffer),
+      rotation: ._90, timeStampNs: 1))
+    let portrait = try XCTUnwrap(frames.snapshot())
+    XCTAssertEqual(portrait["width"] as? Int, 2)
+    XCTAssertEqual(portrait["height"] as? Int, 4)
+    let bytes = try XCTUnwrap(portrait["bytes"] as? FlutterStandardTypedData).data
+    XCTAssertEqual(bytes.count, 32)
+    XCTAssertLessThan(bytes[0], 5)
+    XCTAssertGreaterThan(bytes[2], 250)
+    frames.renderFrame(RTCVideoFrame(buffer: RTCCVPixelBuffer(pixelBuffer: buffer),
+      rotation: ._0, timeStampNs: 2))
+    XCTAssertEqual(frames.snapshot()?["width"] as? Int, 4)
+    frames.clear()
+    XCTAssertNil(frames.snapshot())
+  }
+
+
+  func testRealtimeI420AndAdaptedBuffersRemainUsableForRecognition() throws {
+    let yuv = RTCMutableI420Buffer(width: 4, height: 2)
+    yuv.mutableDataY.initialize(repeating: 81, count: Int(yuv.strideY * yuv.height))
+    yuv.mutableDataU.initialize(repeating: 90, count: Int(yuv.strideU * yuv.chromaHeight))
+    yuv.mutableDataV.initialize(repeating: 240, count: Int(yuv.strideV * yuv.chromaHeight))
+    let frames = OpenPlateRealtimeFrames()
+    frames.renderFrame(RTCVideoFrame(buffer: yuv, rotation: ._0, timeStampNs: 1))
+    let snapshot = try XCTUnwrap(frames.snapshot())
+    XCTAssertEqual(snapshot["width"] as? Int, 4)
+    XCTAssertEqual(snapshot["height"] as? Int, 2)
+    let bytes = try XCTUnwrap(snapshot["bytes"] as? FlutterStandardTypedData).data
+    XCTAssertLessThan(bytes[0], 8)
+    XCTAssertLessThan(bytes[1], 8)
+    XCTAssertGreaterThan(bytes[2], 245)
+
+    var pixelBuffer: CVPixelBuffer?
+    XCTAssertEqual(CVPixelBufferCreate(kCFAllocatorDefault, 8, 4,
+      kCVPixelFormatType_32BGRA, nil, &pixelBuffer), kCVReturnSuccess)
+    let adapted = RTCCVPixelBuffer(pixelBuffer: try XCTUnwrap(pixelBuffer),
+      adaptedWidth: 2, adaptedHeight: 2, cropWidth: 4, cropHeight: 4, cropX: 2, cropY: 0)
+    frames.renderFrame(RTCVideoFrame(buffer: adapted, rotation: ._90, timeStampNs: 2))
+    XCTAssertEqual(frames.snapshot()?["width"] as? Int, 2)
+    XCTAssertEqual(frames.snapshot()?["height"] as? Int, 2)
+    frames.clear()
+  }
 
   func testVehicleAssociationAndSSDDecoding() throws {
     let car = CGRect(x: 0.1, y: 0.1, width: 0.7, height: 0.7)

@@ -53,7 +53,7 @@ jobs:
       - name: Encrypted Dart and Home Assistant round trip over HTTP
         run: |
           task_test_dir="$(mktemp -d)"
-          PYTHONPATH=../.. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' \
+          PYTHONPATH=../.. uv run --no-project --python 3.14 --with 'homeassistant==2026.10.1' --with 'numpy>=2.3.2' --with 'PyTurboJPEG==1.8.3' \
             python ../../integrations/home_assistant/tests/interop_server.py > "$task_test_dir/server.log" 2>&1 &
           task_server_pid=$!
           trap 'kill "$task_server_pid" 2>/dev/null || true' EXIT
