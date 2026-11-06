@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'openplate_api.dart';
+import 'camera_controls.dart';
 import 'settings.dart';
 import 'video_frame.dart';
 import 'realtime_camera.dart';
@@ -25,7 +26,6 @@ class CameraScreen extends StatefulWidget {
     required this.settings,
     this.apiFactory,
     this.recognizer,
-    this.autoStartRecognition = true,
     this.vehicleVerifierFactory,
     super.key,
   });
@@ -34,7 +34,6 @@ class CameraScreen extends StatefulWidget {
   final OpenPlateSettings settings;
   final OpenPlateApi Function(OpenPlateSettings)? apiFactory;
   final LocalPlateRecognizer? recognizer;
-  final bool autoStartRecognition;
   final VehicleVerifier Function(OpenPlateSettings)? vehicleVerifierFactory;
 
   @override
@@ -48,6 +47,7 @@ class _CameraScreenState extends State<CameraScreen>
   Timer? _realtimeTimer;
   bool _readingRealtimeFrame = false;
   bool _haConfigurationVerified = false;
+  bool? _haReachable;
   bool get _cameraReady =>
       (_realtime?.ready ?? false) ||
       (_controller?.value.isInitialized ?? false);
@@ -115,12 +115,12 @@ class _CameraScreenState extends State<CameraScreen>
   (int, int)? _motionFrameSize;
   String _motionStatus = 'Richtung unbekannt';
   bool _startingRecognition = false;
-  late bool _recognitionWanted =
-      widget.autoStartRecognition && widget.settings.isPaired;
+  late bool _recognitionWanted = widget.settings.isPaired;
   Timer? _recognitionRetryTimer;
   bool _modelsReady = false;
   bool _sendingEvents = false;
   bool _streaming = false;
+  bool _legacyLiveConnected = false;
   bool _liveImageEnabledOnce = false;
   bool _sendingFrame = false;
   bool _stoppingStream = false;
@@ -152,16 +152,18 @@ class _CameraScreenState extends State<CameraScreen>
       }
       await api.sendCameraFrame(jpeg, capturedAt);
       if (mounted && _streaming && _realtime == null) {
-        setState(
-          () => _streamStatus = 'Livebild verschlüsselt an Home Assistant',
-        );
+        setState(() {
+          _legacyLiveConnected = true;
+          _streamStatus = 'Livebild verschlüsselt an Home Assistant';
+        });
       }
     } on Object {
       if (mounted && _streaming && _realtime == null) {
-        setState(
-          () => _streamStatus =
-              'Livebild unterbrochen · Verbindung wird erneut versucht',
-        );
+        setState(() {
+          _legacyLiveConnected = false;
+          _streamStatus =
+              'Livebild unterbrochen · Verbindung wird erneut versucht';
+        });
       }
     } finally {
       _sendingFrame = false;
@@ -187,6 +189,7 @@ class _CameraScreenState extends State<CameraScreen>
   void _toggleLiveImage() {
     setState(() {
       _streaming = !_streaming;
+      _legacyLiveConnected = false;
       if (_streaming) _liveImageEnabledOnce = true;
       _streamStatus = _streaming
           ? 'Livebild wird verbunden'
@@ -368,6 +371,7 @@ class _CameraScreenState extends State<CameraScreen>
 
   void _queueCamera(bool open) {
     _haConfigurationVerified = false;
+    _legacyLiveConnected = false;
     final generation = ++_generation;
     _processingEpoch++;
     _confirmation.reset();
@@ -505,9 +509,11 @@ class _CameraScreenState extends State<CameraScreen>
         if (cameraChanged) _queueCamera(_foreground);
       }
       _haConfigurationVerified = true;
+      _haReachable = true;
       await _configureVehicles();
       setState(() => _haStatus = 'Home Assistant verbunden');
     } on Object {
+      _haReachable = false;
       if (mounted) {
         setState(
           () => _haStatus =
@@ -555,20 +561,6 @@ class _CameraScreenState extends State<CameraScreen>
     }
     _lastFrame = now;
     unawaited(_processFrame(VideoFrame(image)));
-  }
-
-  Future<void> _toggleRecognition() async {
-    _recognitionWanted = !_recognizing;
-    _recognitionRetryTimer?.cancel();
-    if (!_recognitionWanted) {
-      setState(() {
-        _recognizing = false;
-        _recognitionStatus = 'Erkennung ausgeschaltet';
-      });
-      _resetFrameAdmission();
-      return;
-    }
-    await _ensureRecognitionStarted();
   }
 
   Future<void> _ensureRecognitionStarted() async {
@@ -857,7 +849,7 @@ class _CameraScreenState extends State<CameraScreen>
                   color: Colors.black,
                 ),
               if (!_blackMode || _controlsVisible)
-                SafeArea(child: _buildControls(controller)),
+                SafeArea(child: _buildControls()),
             ],
           ),
         ),
@@ -865,197 +857,130 @@ class _CameraScreenState extends State<CameraScreen>
     );
   }
 
-  Widget _buildControls(CameraController? controller) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Material(
-                    color: const Color(0xED151E29),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.videocam_outlined,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Live-Kamera',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          Text(_cameraStatus),
-                          Text(_streamStatus),
-                          Text(
-                            _settings.isPaired
-                                ? _haStatus
-                                : 'Home Assistant nicht gekoppelt',
-                          ),
-                          Text(
-                            _settings.isComplete
-                                ? _recognitionStatus
-                                : 'Nur Live-Vorschau · keine Bildübertragung. '
-                                      'Home Assistant per QR-Code koppeln. Die Erkennung läuft lokal.',
-                          ),
-                          if (_lastPlate != null) ...[
-                            const SizedBox(height: 16),
-                            const Text(
-                              'ZULETZT BESTÄTIGT',
-                              style: TextStyle(
-                                fontSize: 10,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0F4F8),
-                                borderRadius: BorderRadius.circular(8),
-                                border: const Border(
-                                  left: BorderSide(
-                                    color: Color(0xFF2455B2),
-                                    width: 10,
-                                  ),
-                                ),
-                              ),
-                              child: Text(
-                                _lastPlate!,
-                                style: const TextStyle(
-                                  color: Color(0xFF0B1118),
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                          ],
-                          Text(_motionStatus),
-                          if (_lastPlate != null &&
-                              _vehicleResults[_lastPlate] != null) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              'Fahrzeug: ${_vehicleResults[_lastPlate]!.status}',
-                            ),
-                          ],
-                          for (final plate in _vehicleCandidates.keys)
-                            TextButton.icon(
-                              onPressed: _reviewingVehicle
-                                  ? null
-                                  : () => _reviewVehicle(plate),
-                              icon: const Icon(Icons.directions_car_outlined),
-                              label: Text('$plate · Fahrzeug bestätigen'),
-                            ),
-                          if (_rawReading != null)
-                            ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Diagnose',
-                                style: TextStyle(fontSize: 13),
-                              ),
-                              children: [
-                                Text(
-                                  'OCR-Rohwert (nicht bestätigt): $_rawReading',
-                                ),
-                              ],
-                            ),
-                          if (_blackMode)
-                            const Text(
-                              'Bedienung wird nach 8 Sekunden ausgeblendet.',
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_cameraError)
-                          FilledButton.icon(
-                            onPressed: () => _queueCamera(_foreground),
-                            icon: const Icon(Icons.refresh),
-                            label: const Text('Kamera erneut starten'),
-                          ),
-                        FilledButton.icon(
-                          onPressed:
-                              _settings.isComplete &&
-                                  _cameraReady &&
-                                  !_startingRecognition
-                              ? _toggleRecognition
-                              : null,
-                          icon: Icon(
-                            _recognizing ? Icons.pause : Icons.play_arrow,
-                          ),
-                          label: Text(
-                            _recognizing
-                                ? 'Erkennung stoppen'
-                                : 'Erkennung starten',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        FilledButton.tonalIcon(
-                          onPressed:
-                              !_settings.supportsWebRTC &&
-                                  _settings.isPaired &&
-                                  _cameraReady
-                              ? _toggleLiveImage
-                              : null,
-                          icon: Icon(
-                            _streaming ? Icons.videocam_off : Icons.videocam,
-                          ),
-                          label: Text(
-                            _settings.supportsWebRTC
-                                ? 'Livebild in Home Assistant einstellen'
-                                : _streaming
-                                ? 'HA-Livebild stoppen'
-                                : 'HA-Livebild starten',
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        FilledButton.tonalIcon(
-                          onPressed: _toggleBlackMode,
-                          icon: Icon(
-                            _blackMode ? Icons.visibility : Icons.dark_mode,
-                          ),
-                          label: Text(
-                            _blackMode ? 'Vorschau anzeigen' : 'Schwarzmodus',
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(),
-                          child: const Text('Kamera schließen'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+  Widget _buildControls() {
+    final paired = _settings.isPaired;
+    final retrying = _recognitionRetryTimer?.isActive ?? false;
+    final recognition = !paired
+        ? 'Kopplung erforderlich'
+        : !_foreground
+        ? 'Pausiert'
+        : _recognizing
+        ? 'Läuft automatisch'
+        : _startingRecognition
+        ? 'Modelle werden geladen'
+        : retrying
+        ? 'Automatischer neuer Versuch'
+        : 'Startet automatisch';
+    final liveEnabled = _settings.supportsWebRTC
+        ? _settings.liveCamera.enabled
+        : _streaming;
+    final liveConnected = _realtime?.isConnected ?? _legacyLiveConnected;
+    final live = !paired
+        ? 'Nicht gekoppelt'
+        : !_foreground
+        ? 'Pausiert'
+        : !liveEnabled
+        ? 'In HA ausgeschaltet'
+        : liveConnected
+        ? 'Live verbunden'
+        : _cameraReady && _haReachable == true
+        ? 'Bereit für Liveansicht'
+        : 'Wird verbunden';
+    final verdict = _vehicleResults[_lastPlate]?.status;
+    final vehicle = switch (verdict) {
+      'confirmed' => 'Bestätigt',
+      'match' => 'Passt zum Profil',
+      'mismatch' => 'Abweichung erkannt',
+      'enrollment_required' => 'Einlernen erforderlich',
+      'unknown' => 'Noch nicht geprüft',
+      _ => null,
+    };
+    return CameraControls(
+      paired: paired,
+      blackMode: _blackMode,
+      statusLabel: !_foreground
+          ? 'Pausiert'
+          : _cameraError
+          ? 'Fehler'
+          : _cameraReady
+          ? 'Aktiv'
+          : 'Startet',
+      statusTone: _cameraError
+          ? CameraStatusTone.error
+          : _cameraReady && _foreground
+          ? CameraStatusTone.active
+          : CameraStatusTone.pending,
+      statuses: [
+        CameraStatusItem(
+          Icons.center_focus_strong_outlined,
+          'Erkennung',
+          recognition,
+          !_foreground
+              ? CameraStatusTone.muted
+              : _recognizing
+              ? CameraStatusTone.active
+              : paired
+              ? CameraStatusTone.pending
+              : CameraStatusTone.muted,
+        ),
+        CameraStatusItem(
+          Icons.home_outlined,
+          'Home Assistant',
+          !paired
+              ? 'Nicht gekoppelt'
+              : _haReachable == true
+              ? 'Verbunden'
+              : _haReachable == false
+              ? 'Nicht erreichbar'
+              : 'Wird verbunden',
+          _haReachable == true
+              ? CameraStatusTone.active
+              : paired
+              ? CameraStatusTone.pending
+              : CameraStatusTone.muted,
+        ),
+        CameraStatusItem(
+          Icons.videocam_outlined,
+          'Livebild',
+          live,
+          !_foreground
+              ? CameraStatusTone.muted
+              : liveConnected
+              ? CameraStatusTone.active
+              : liveEnabled
+              ? CameraStatusTone.pending
+              : CameraStatusTone.muted,
+        ),
+      ],
+      notice: _cameraError ? _cameraStatus : null,
+      lastPlate: _lastPlate,
+      motionStatus: _motionStatus,
+      vehicleLabel: vehicle,
+      vehicleActions: [
+        for (final plate in _vehicleCandidates.keys)
+          TextButton.icon(
+            onPressed: _reviewingVehicle ? null : () => _reviewVehicle(plate),
+            icon: const Icon(Icons.directions_car_outlined),
+            label: Text('$plate · Fahrzeug bestätigen'),
           ),
-        );
+      ],
+      details: {
+        'Kamera': _cameraStatus,
+        'Erkennung': _recognitionStatus,
+        'Verbindung': _haStatus,
+        'Livebild': _streamStatus,
+        if (_settings.supportsWebRTC)
+          'Bildqualität':
+              '${_settings.liveCamera.resolution} · Ziel ${_settings.liveCamera.fps} FPS',
+        'OCR-Rohwert (nicht bestätigt)': ?_rawReading,
       },
+      onBack: () => Navigator.of(context).pop(),
+      onRetry: _cameraError ? () => _queueCamera(_foreground) : null,
+      onToggleBlackMode: _toggleBlackMode,
+      onToggleLegacyLive: !_settings.supportsWebRTC && paired && _cameraReady
+          ? _toggleLiveImage
+          : null,
+      legacyStreaming: _streaming,
     );
   }
 }

@@ -106,6 +106,9 @@ class TestPeer extends RTCPeerConnection {
   final TestSender sender;
   late final TestTransceiver transceiver;
   int closes = 0;
+  @override
+  RTCPeerConnectionState? connectionState =
+      RTCPeerConnectionState.RTCPeerConnectionStateNew;
   RTCSessionDescription? remote;
   final candidates = <RTCIceCandidate>[];
   @override
@@ -233,6 +236,11 @@ void main() {
       ]);
       await settle();
       expect(peer.remote!.sdp, 'offer');
+      expect(camera.isConnected, isFalse);
+      peer.connectionState =
+          RTCPeerConnectionState.RTCPeerConnectionStateConnected;
+      peer.onConnectionState?.call(peer.connectionState!);
+      expect(camera.isConnected, isTrue);
       expect(peer.transceiver.codecs!.single.mimeType, 'video/H264');
       expect(peer.transceiver.direction, TransceiverDirection.SendOnly);
       expect(peer.sender.parameters.encodings!.single.maxFramerate, 24);

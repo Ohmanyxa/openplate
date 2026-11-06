@@ -232,7 +232,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(local.initializations, 1);
-      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      expect(find.text('Läuft automatisch'), findsOneWidget);
       platform.emitFrame();
       await tester.pumpAndSettle();
       expect(local.recognitions, 1);
@@ -243,11 +243,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(platform.disposed, 1);
+      expect(find.text('Läuft automatisch'), findsNothing);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(platform.created, 2);
       expect(local.initializations, 1);
-      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      expect(find.text('Läuft automatisch'), findsOneWidget);
       await close(tester);
     },
   );
@@ -278,11 +279,11 @@ void main() {
       await tester.pumpAndSettle();
       gate.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Erkennung stoppen'), findsNothing);
+      expect(find.text('Läuft automatisch'), findsNothing);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(local.initializations, 1);
-      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      expect(find.text('Läuft automatisch'), findsOneWidget);
       await close(tester);
     },
   );
@@ -304,15 +305,12 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(local.initializations, 1);
-      expect(
-        find.textContaining('Automatischer neuer Versuch'),
-        findsOneWidget,
-      );
+      expect(find.text('Automatischer neuer Versuch'), findsOneWidget);
       local.failInitialization = false;
       await tester.pump(const Duration(seconds: 30));
       await tester.pumpAndSettle();
       expect(local.initializations, 2);
-      expect(find.text('Erkennung stoppen'), findsOneWidget);
+      expect(find.text('Läuft automatisch'), findsOneWidget);
       await close(tester);
     },
   );
@@ -322,20 +320,15 @@ void main() {
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(
-            autoStartRecognition: false,
-            cameras: [camera],
-            settings: previewOnly,
-          ),
+          home: CameraScreen(cameras: [camera], settings: previewOnly),
         ),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('test-camera-preview')), findsOneWidget);
-      expect(find.textContaining('Nur Live-Vorschau'), findsOneWidget);
-      final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Erkennung starten'),
-      );
-      expect(button.onPressed, isNull);
+      expect(find.text('Lokale Vorschau'), findsOneWidget);
+      expect(find.text('Kopplung erforderlich'), findsOneWidget);
+      expect(find.text('Erkennung starten'), findsNothing);
+      expect(find.text('Erkennung stoppen'), findsNothing);
       await tester.pump(const Duration(seconds: 5));
       expect(platform.photos, 0);
       await close(tester);
@@ -343,61 +336,63 @@ void main() {
     },
   );
 
-  testWidgets('live image is opt-in and works with recognition switched off', (
-    tester,
-  ) async {
-    final api = TestApi(configured);
-    const channel = MethodChannel('openplate/local_recognition');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-          expect(call.method, 'encodeCameraFrame');
-          return Uint8List.fromList([255, 216, 255, 217]);
-        });
-    addTearDown(
-      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(channel, null),
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CameraScreen(
-          autoStartRecognition: false,
-          cameras: const [camera],
-          settings: configured,
-          apiFactory: (_) => api,
+  testWidgets(
+    'legacy live image works while recognition models are still loading',
+    (tester) async {
+      final api = TestApi(configured);
+      final modelGate = Completer<void>();
+      final local = TestRecognizer()..initializationGate = modelGate;
+      const channel = MethodChannel('openplate/local_recognition');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'encodeCameraFrame');
+            return Uint8List.fromList([255, 216, 255, 217]);
+          });
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CameraScreen(
+            cameras: const [camera],
+            settings: configured,
+            recognizer: local,
+            apiFactory: (_) => api,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    platform.emitFrame();
-    await tester.pump();
-    expect(api.cameraFrames, isEmpty);
-    await tester.ensureVisible(find.text('HA-Livebild starten'));
-    await tester.tap(find.text('HA-Livebild starten'));
-    await tester.pump();
-    platform.emitFrame();
-    await tester.pumpAndSettle();
-    expect(api.cameraFrames.whereType<Uint8List>(), hasLength(1));
-    expect(find.text('Erkennung starten'), findsOneWidget);
-    await tester.tap(find.text('HA-Livebild stoppen'));
-    await tester.pumpAndSettle();
-    expect(api.cameraFrames.last, isNull);
-    final count = api.cameraFrames.length;
-    platform.emitFrame();
-    await tester.pumpAndSettle();
-    expect(api.cameraFrames.length, count);
-    await close(tester);
-  });
+      );
+      await tester.pumpAndSettle();
+      platform.emitFrame();
+      await tester.pump();
+      expect(api.cameraFrames, isEmpty);
+      await tester.ensureVisible(find.text('HA-Livebild starten'));
+      await tester.tap(find.text('HA-Livebild starten'));
+      await tester.pump();
+      platform.emitFrame();
+      await tester.pumpAndSettle();
+      expect(api.cameraFrames.whereType<Uint8List>(), hasLength(1));
+      expect(find.text('Modelle werden geladen'), findsOneWidget);
+      expect(find.text('Erkennung starten'), findsNothing);
+      await tester.tap(find.text('HA-Livebild stoppen'));
+      await tester.pumpAndSettle();
+      expect(api.cameraFrames.last, isNull);
+      final count = api.cameraFrames.length;
+      platform.emitFrame();
+      await tester.pumpAndSettle();
+      expect(api.cameraFrames.length, count);
+      modelGate.complete();
+      await tester.pumpAndSettle();
+      await close(tester);
+    },
+  );
 
   testWidgets('black mode hides UI and preview without disposing the camera', (
     tester,
   ) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: CameraScreen(
-          autoStartRecognition: false,
-          cameras: [camera],
-          settings: previewOnly,
-        ),
+        home: CameraScreen(cameras: [camera], settings: previewOnly),
       ),
     );
     await tester.pumpAndSettle();
@@ -405,7 +400,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('all-black-screen')), findsOneWidget);
     expect(find.byKey(const Key('test-camera-preview')), findsNothing);
-    expect(find.text('Kamera schließen'), findsNothing);
+    expect(find.byTooltip('Zur Übersicht'), findsNothing);
     expect(platform.disposed, 0);
     await tester.tapAt(const Offset(100, 100));
     await tester.pump();
@@ -447,7 +442,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CameraScreen(
-            autoStartRecognition: false,
             cameras: const [camera],
             settings: settings,
             recognizer: local,
@@ -456,8 +450,6 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Erkennung starten'));
       await tester.pumpAndSettle();
       for (var i = 0; i < 3; i++) {
         await tester.runAsync(() async {
@@ -491,7 +483,6 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: CameraScreen(
-            autoStartRecognition: false,
             cameras: const [camera],
             settings: configured,
             apiFactory: (_) => api,
@@ -501,8 +492,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(local.recognitions, 0);
-      await tester.tap(find.text('Erkennung starten'));
-      await tester.pump();
+      expect(find.text('Läuft automatisch'), findsOneWidget);
       platform.emitFrame();
       await tester.pump();
       await tester.runAsync(() async {
@@ -544,6 +534,7 @@ void main() {
       expect(platform.photos, pausedPhotos);
       expect(platform.photos, 0);
       expect(platform.disposed, 1);
+      expect(find.text('Läuft automatisch'), findsNothing);
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pumpAndSettle();
       expect(platform.created, 2);
@@ -557,11 +548,7 @@ void main() {
       platform.failInitialization = true;
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(
-            autoStartRecognition: false,
-            cameras: [camera],
-            settings: previewOnly,
-          ),
+          home: CameraScreen(cameras: [camera], settings: previewOnly),
         ),
       );
       await tester.pumpAndSettle();
@@ -583,11 +570,7 @@ void main() {
       platform.initializationGate = gate;
       await tester.pumpWidget(
         const MaterialApp(
-          home: CameraScreen(
-            autoStartRecognition: false,
-            cameras: [camera],
-            settings: previewOnly,
-          ),
+          home: CameraScreen(cameras: [camera], settings: previewOnly),
         ),
       );
       await tester.pump();

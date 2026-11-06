@@ -59,7 +59,7 @@ is not the video stream. [Setup and limits](docs/REALTIME_VIDEO.md).
 
 With a saved pairing, opening the iPhone app automatically opens the camera and starts local
 recognition. HA-enabled live view starts with it; a failed initial HA request does not delay capture.
-Before pairing, **Kamera öffnen** still offers a local preview without a recognition server. **Schwarzmodus** hides the app surface
+Before pairing, **Kamera starten** still offers a local preview without a recognition server. **Schwarzmodus** hides the app surface
 while the camera and any running recognition continue; tap to reveal controls and return to preview.
 iOS backgrounding or locking pauses the camera; returning to the foreground resumes it automatically.
 Keep the app in the foreground for continuous operation. See [camera controls](apps/openplate_mobile/README.md#live-preview-and-black-mode).

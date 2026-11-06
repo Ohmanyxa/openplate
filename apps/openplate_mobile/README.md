@@ -15,18 +15,18 @@ Flutter/iOS foreground camera client for a mounted OpenPlate camera.
 
 ## Live preview and black mode
 
-Tap **Kamera öffnen** to align the camera. The local live preview works even before pairing or before
+Tap **Kamera starten** to align the camera. The local live preview works even before pairing or before
 configuring a recognition server. It neither takes still photos nor uploads frames by itself. HA
 connection and recognition status are displayed separately; saved pairing data alone is not shown as
 a verified live connection.
 
 With a saved pairing, app launch automatically opens the camera and starts recognition.
-After temporarily stopping recognition, **Erkennung starten** resumes it manually. The first start downloads about 11 MB of pinned models over
+There is no separate recognition start/stop button. The first start downloads about 11 MB of pinned models over
 HTTPS and verifies their SHA-256 hashes. Subsequent recognition works offline on the iPhone CPU via
 ONNX Runtime 1.30.0, not yet Core ML/Neural Engine. iOS 15.1+ is required.
 By default camera frames stay local; confirmed plate strings and metadata go encrypted to HA.
 Optional HA live view additionally sends encrypted camera images.
-Tap **Erkennung stoppen** to return to local preview. **Schwarzmodus** makes the app surface black and
+**Schwarzmodus** makes the app surface black and
 hides controls immediately without stopping the camera or a running recognition loop. Tap the black
 screen to reveal controls, then **Vorschau anzeigen** to restore the preview. Controls in black mode
 hide again after eight seconds. The app prevents automatic screen locking while this screen is active.
@@ -172,8 +172,9 @@ wait for a successful configuration refresh so a stale saved live setting cannot
 
 Backgrounding or locking an iPhone pauses camera capture. Returning to the app recreates the
 camera and resumes the requested recognition/live state automatically, including when the
-first model load was interrupted. Explicitly stopping recognition stays stopped for that camera
-screen; explicitly closing the camera returns to the dashboard without an immediate reopen loop.
+first model load was interrupted. Use the back button **Zur Übersicht** to stop the camera and return to the dashboard without an
+immediate reopen loop. Camera, recognition and HA-authorized live view start together when
+**Kamera starten** is selected again.
 A fresh app launch starts automatically again. Before pairing the setup dashboard remains visible.
 
 For a mounted iPhone use black mode and, if desired, iOS Guided Access. Wakelock prevents automatic
@@ -181,3 +182,12 @@ screen locking while the camera is foregrounded. Black mode is an app surface, n
 No VoIP/audio background mode or unsupported camera entitlement is declared to simulate continuous
 background surveillance. Apple documents background camera interruption and separate multitasking
 exceptions: https://developer.apple.com/documentation/avfoundation/avcapturesession/interruptionreason/videodevicenotavailableinbackground
+
+## Camera interface
+
+The camera view has a back control at the top left, a camera activity indicator and one compact
+status panel for recognition, HA connectivity and live view. The latest confirmed plate remains
+visible; technical diagnostics are under **Details**. There is no separate recognition button or
+disabled WebRTC-settings button. **Schwarzmodus** is the main operating action; HA still controls
+live video and recognition settings. Before pairing, the same screen offers a local preview only.
+The status panel scrolls on small screens or with large accessibility text.

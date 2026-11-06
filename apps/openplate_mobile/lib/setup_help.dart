@@ -107,7 +107,7 @@ class SetupHelpScreen extends StatelessWidget {
             'Detection, OCR und Mehrfachbestätigung laufen lokal auf dem iPhone. '
             'Du brauchst keinen Erkennungsserver. Die Modelle werden beim ersten Start '
             'heruntergeladen und danach offline genutzt. Kennzeichen werden verschlüsselt gesendet. '
-            'Mit „HA-Livebild starten“ kannst du zusätzlich Kamerabilder verschlüsselt an Home Assistant übertragen.',
+            'Das Livebild aktivierst du zentral in Home Assistant unter OpenPlate → Konfigurieren → Kamera und Verbindung → Livebild. Beim Kamerastart läuft es dann automatisch an.',
           ),
         ],
       ),

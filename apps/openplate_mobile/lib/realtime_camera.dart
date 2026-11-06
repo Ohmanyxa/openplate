@@ -46,6 +46,11 @@ class RealtimeCamera {
   int _ack = 0;
   bool _disposed = false;
   bool _rendererInitialized = false;
+  bool get isConnected => _viewers.values.any(
+    (viewer) =>
+        viewer.connection.connectionState ==
+        RTCPeerConnectionState.RTCPeerConnectionStateConnected,
+  );
   bool get ready => !_disposed && _stream != null;
 
   Future<void> start() async {

@@ -55,7 +55,7 @@ class _VehicleProfilesScreenState extends State<VehicleProfilesScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               const Text(
-                'Einlernen in der Live-Kamera: Erkennung starten und das angezeigte Fahrzeug bestätigen. '
+                'Einlernen in der Live-Kamera: Kamera starten und das angezeigte Fahrzeug bestätigen. Die Erkennung läuft automatisch. '
                 'Referenzen bleiben lokal. Erst nach mehreren Begegnungen den automatischen Vergleich bewusst aktivieren.',
               ),
               const SizedBox(height: 16),

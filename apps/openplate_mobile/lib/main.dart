@@ -318,7 +318,7 @@ class DashboardScreen extends StatelessWidget {
                       FilledButton.icon(
                         onPressed: cameraAvailable ? onOpenCamera : null,
                         icon: const Icon(Icons.arrow_forward_rounded),
-                        label: const Text('Kamera öffnen'),
+                        label: const Text('Kamera starten'),
                       ),
                     ],
                   ),

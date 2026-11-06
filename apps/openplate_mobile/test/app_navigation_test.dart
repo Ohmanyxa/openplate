@@ -101,7 +101,7 @@ void main() {
       await tester.pageBack();
       await tester.pumpAndSettle();
       expect(find.text('Automatisch gestartete Kamera'), findsNothing);
-      expect(find.text('Kamera öffnen'), findsOneWidget);
+      expect(find.text('Kamera starten'), findsOneWidget);
       expect(opens, 1);
       expect(api.refreshes, 1);
       await tester.pumpWidget(const SizedBox());
@@ -174,11 +174,11 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byTooltip('Einstellungen'), findsOneWidget);
-    expect(find.text('Kamera öffnen'), findsOneWidget);
+    expect(find.text('Kamera starten'), findsOneWidget);
     expect(find.text('Verbunden · verschlüsselt'), findsOneWidget);
     expect(find.textContaining('QR-Code scannen'), findsNothing);
     await tester.runAsync(() => capture(tester, 'dashboard'));
-    await tester.tap(find.text('Kamera öffnen'));
+    await tester.tap(find.text('Kamera starten'));
     expect(cameraOpens, 1);
     await tester.tap(find.byTooltip('Einstellungen'));
     await tester.pumpAndSettle();

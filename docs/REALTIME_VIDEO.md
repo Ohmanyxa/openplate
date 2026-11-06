@@ -75,3 +75,11 @@ Abschalten, Timeout sowie die Umstellung mit stabiler Kamera-ID. Dart-Tests prü
 überträgt SDP zwischen echtem Dart-Client und dem Python-Handler verschlüsselt. Ein nativer
 Simulator-Test prüft Frame-Ausrichtung, BGRA-Farben und das Verwerfen alter Puffer.
 Diese Tests messen keine Ende-zu-Ende-Videolatenz eines echten iPhones.
+
+## Kameraansicht
+
+**Kamera starten** öffnet den vollständigen automatischen Betrieb. Einen separaten
+Erkennungsbutton gibt es nicht mehr. Oben links führt **Zur Übersicht** zurück und beendet
+die aktuelle Kameraaufnahme. Der Statusbereich trennt Erkennung, HA-Verbindung und Livebild;
+das letzte bestätigte Kennzeichen bleibt sichtbar. **Schwarzmodus** blendet die Bedienung aus,
+**Details** enthält Diagnosewerte. Livebild-Freigabe und Bildqualität bleiben in HA.
